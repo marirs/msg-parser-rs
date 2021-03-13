@@ -1,0 +1,36 @@
+[package]
+name = "msg_parser"
+description = "Outlook Email Message (.msg) parser"
+version = "0.1.0"
+authors = ["Marirs <marirs@gmail.com>"]
+readme = "README.md"
+license = "MIT"
+categories = ["email", "parser-implementations"]
+keywords = ["msg", "mail", "ole", "outlook", "parser"]
+repository = "https://github.com/marirs/msg-parser-rs"
+homepage = "https://github.com/marirs/msg-parser-rs"
+edition = "2018"
+
+[dependencies]
+hex = { version = "0.4", features = ["serde"] }
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+
+[lib]
+name = "msg_parser"
+path = "src/lib.rs"
+
+[badges]
+travis-ci = { repository = "marirs/msg-parser-rs" }
+
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+codegen-units = 1
+debug-assertions = false
+debug = false
+opt-level = 3
+lto = true
