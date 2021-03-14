@@ -70,7 +70,7 @@ cargo b --release
 
 ### Contributions
 
-Fee free to make pull requests to contribute/enhance/add more features/bug fixes.
+Feel free to make pull requests to contribute/enhance/add more features/bug fixes.
 
 ---
 License: MIT
