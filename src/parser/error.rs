@@ -1,6 +1,5 @@
 use std::{
     io,
-    error::Error as StdError
 };
 
 use serde_json::Error as SerdeError;
@@ -52,7 +51,7 @@ pub enum Error {
         source: io::Error,
     },
 
-    #[error("Error parsing file with ole: {}", .source.description())]
+    #[error("Error parsing file with ole: {}", .source)]
     OleError {
         #[from]
         source: OleError,
