@@ -1,5 +1,6 @@
 Outlook Email Messsage (.msg) parser.
 =======================================
+[![Build Status](https://travis-ci.com/marirs/msg-parser-rs.svg?branch=master)](https://travis-ci.com/marirs/msg-parser-rs)
 
 A simple parser and reader to deserialize a given Outlook Email Message (.msg) File.  
 
