@@ -549,17 +549,7 @@ mod tests {
 
         assert_eq!(
             outlook.cc,
-            vec![
-                Person::new("Sriram Govindan".to_string(), "marirs@aol.in".to_string()),
-                Person::new(
-                    "Sriram Govindan".to_string(),
-                    "marirs@gmail.com".to_string()
-                ),
-                Person::new(
-                    "canitinjogad@gmail.com".to_string(),
-                    "canitinjogad@gmail.com".to_string()
-                ),
-            ]
+            vec![]
         );
     }
 
