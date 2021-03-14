@@ -16,11 +16,26 @@ msg_parser = "0.1.0"
 ### Example
 
 ```rust
+use msg_parser::Outlook;
+
+fn main() {
+    // Create Outlook object
+    let outlook = Outlook::from_path("data/test_email.msg").unwrap();
+
+    // Flush as json string
+    let json_string = outlook.to_json();
+
+    println!("{:#?}", outlook);
+    
+    println!();
+    println!("json_string ---");
+    println!("{:?}", json_string);
+}
 
 ```
 
 ### Requirements
-- Rust 1.9+
+- Rust 1.42+
 
 ### Running the given example
 ```bash
