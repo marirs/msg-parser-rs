@@ -1,4 +1,4 @@
-#![allow(unused_imports, bare_trait_objects, deprecated, dead_code)]
+#![allow(unused_imports, dead_code)]
 //! A simple parser and reader for Microsoft Compound Document File.
 //!
 //! This includes a basic parser, which validates the format of a given file

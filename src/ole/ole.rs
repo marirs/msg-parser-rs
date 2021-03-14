@@ -22,7 +22,7 @@ use std;
 pub struct Reader<'ole> {
 
   /// Buffer for reading from the source.
-  pub(crate) buf_reader: Option<std::io::BufReader<Box<std::io::Read + 'ole>>>,
+  pub(crate) buf_reader: Option<std::io::BufReader<Box<dyn std::io::Read + 'ole>>>,
 
   /// Unique identifier.
   pub(crate) uid: std::vec::Vec<u8>,
@@ -156,7 +156,7 @@ mod tests {
     let o : Result<Reader, Error> = Reader::from_path(path);
     assert_eq!(o.is_ok(), false);
     let e = o.err().unwrap();
-    println!("NOK: {}", e.description());
+    println!("NOK: {}", e.to_string());
   }
 
   #[test]

@@ -164,7 +164,6 @@ impl Outlook {
 
     fn populate(storages: &Storages) -> Self {
         let headers_text = storages.get_val_from_root_or_default("TransportMessageHeaders");
-        println!("{}", headers_text);
         let headers = TransportHeaders::create_from_headers_text(&headers_text);
 
         // Outlook::extract_cc_from_headers(&headers_text);
