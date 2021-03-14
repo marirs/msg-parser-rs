@@ -34,33 +34,28 @@ pub enum Error {
   EmptyEntry,
 }
 
-impl std::error::Error for Error {
-  fn description(&self) -> &str {
+impl std::fmt::Display for Error {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match *self {
-      Error::BadFileSize => "Filesize is null or too big.",
-      Error::IOError(ref e) => e.description(),
-      Error::NotImplementedYet => "Method not implemented yet",
-      Error::InvalidOLEFile => "Invalid OLE File",
-      Error::BadSizeValue(ref e) => e,
-      Error::EmptyMasterSectorAllocationTable => "MSAT is empty",
-      Error::NotSectorUsedBySAT => "Sector is not a sector used by the SAT.",
-      Error::NodeTypeUnknown => "Unknown node type",
-      Error::BadRootStorageSize => "Bad RootStorage size",
-      Error::EmptyEntry => "Empty entry"
-    }
-  }
-
-  fn cause(&self) -> Option<&std::error::Error> {
-    match *self {
-      Error::IOError(ref e) => Some(e),
-      _ => None
+      Error::BadFileSize => write!(f, "Filesize is null or too big."),
+      Error::IOError(ref e) => write!(f, "{}", e.to_string()),
+      Error::NotImplementedYet => write!(f, "Method not implemented yet"),
+      Error::InvalidOLEFile => write!(f, "Invalid OLE File"),
+      Error::BadSizeValue(ref e) => write!(f, "{}", e.to_string()),
+      Error::EmptyMasterSectorAllocationTable => write!(f, "MSAT is empty"),
+      Error::NotSectorUsedBySAT => write!(f, "Sector is not a sector used by the SAT."),
+      Error::NodeTypeUnknown => write!(f, "Unknown node type"),
+      Error::BadRootStorageSize => write!(f, "Bad RootStorage size"),
+      Error::EmptyEntry => write!(f, "Empty entry")
     }
   }
 }
 
-impl std::fmt::Display for Error {
-  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-    use std::error::Error;
-    write!(f, "{}", self.description())
+impl std::error::Error for Error {
+  fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+    match *self {
+      Error::IOError(ref e) => Some(e),
+      _ => None
+    }
   }
 }
