@@ -391,7 +391,7 @@ mod tests {
         assert_eq!(
             displays,
             vec![
-                "1 Days Left\u{14} 35% off cloud space, upgrade now!".to_string(),
+                "1 Days Left—35% off cloud space, upgrade now!".to_string(),
                 "milky-way-2695569_960_720.jpg".to_string(),
                 "Test Email.msg".to_string(),
             ]

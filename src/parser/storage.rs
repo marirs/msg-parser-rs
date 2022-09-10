@@ -312,7 +312,7 @@ mod tests {
         let attachment_name = storages.attachments[0].get("DisplayName");
         assert_eq!(
             attachment_name,
-            Some(&DataType::PtypString("1 Days Left\u{14} 35% off cloud space, upgrade now!".to_string()))
+            Some(&DataType::PtypString("1 Days Left—35% off cloud space, upgrade now!".to_string()))
         );
 
         let attachment_name = storages.attachments[1].get("AttachFilename");
