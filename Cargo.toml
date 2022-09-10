@@ -1,7 +1,7 @@
 [package]
 name = "msg_parser"
 description = "Outlook Email Message (.msg) parser"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Marirs <marirs@gmail.com>"]
 readme = "README.md"
 license = "MIT"

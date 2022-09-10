@@ -10,7 +10,7 @@ A simple parser and reader to deserialize a given Outlook Email Message (.msg) F
 Add this to your `Cargo.toml` file:
 ```toml
 [dependencies]
-msg_parser = "0.1.0"
+msg_parser = "0.1.1"
 ```
 
 ### Example
