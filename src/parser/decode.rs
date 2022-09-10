@@ -48,21 +48,31 @@ fn decode_ptypstring(buff: &Vec<u8>) -> Result<DataType, Error> {
     // PtypString
     // Byte sequence is in little-endian format
     // Use UTF-16 String decode
-    let buffu16: Vec<u16> = if cfg!(target_endian = "little") {
-        buff.iter().map(|&x| x as u16).collect()
-    } else {
-        buff.iter().map(|&x| x as u16).rev().collect()
-    };
+    let mut buff_iter = buff.iter();
+    let mut buffu16 = Vec::new();
+    loop {
+        let c1 = match buff_iter.next() {
+            Some(c) => c,
+            None => {
+                break;
+            },
+        };
+        let duo = match buff_iter.next() {
+            Some(c2) => [*c1, *c2],
+            None => [*c1, 0_u8],
+        };
+        buffu16.push(u16::from_le_bytes(duo));
+    }
     match String::from_utf16(&buffu16) {
         // Remove all terminated null character
-        Ok(decoded) => Ok(DataType::PtypString(decoded.replace(char::from(0), ""))),
+        Ok(decoded) => Ok(DataType::PtypString(decoded)),
         Err(err) => Err(DataTypeError::Utf16Err(err).into()),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DataType, PtypDecoder};
+    use super::{DataType, PtypDecoder, decode_ptypstring};
     use crate::ole::Reader;
 
     #[test]
@@ -94,5 +104,34 @@ mod tests {
             ptypstring_decoded,
             DataType::PtypString("marirs@outlook.com".to_string())
         );
+    }
+
+    #[test]
+    fn test_decode_ptypstring_ascii() {
+        let raw_str = vec![0x51, 0x00, 0x77, 0x00, 0x65, 0x00, 0x72, 0x00, 0x74, 0x00, 0x79, 0x00, 0x21, 0x00];
+        let res = decode_ptypstring(&raw_str);
+        assert!(res.is_ok());
+        let s = res.unwrap();
+        assert_eq!(s, DataType::PtypString("Qwerty!".to_string()));
+    }
+
+    #[test]
+    fn test_decode_ptypstring_non_ascii() {
+        let raw_str = vec![0x52, 0x00, 0xe9, 0x00, 0x70, 0x00, 0x6f, 0x00, 0x6e, 0x00, 0x73, 0x00, 0x65, 0x00];
+        let res = decode_ptypstring(&raw_str);
+        assert!(res.is_ok());
+        let s = res.unwrap();
+        assert_ne!(s, DataType::PtypString("Réponse".to_string()));
+        assert_eq!(s, DataType::PtypString("Réponse".to_string()));
+    }
+
+    #[test]
+    fn test_decode_ptypstring_grapheme_clusters() {
+        let raw_str = vec![0x52, 0x00, 0x65, 0x00, 0x01, 0x03, 0x70, 0x00, 0x6f, 0x00, 0x6e, 0x00, 0x73, 0x00, 0x65, 0x00];
+        let res = decode_ptypstring(&raw_str);
+        assert!(res.is_ok());
+        let s = res.unwrap();
+        assert_eq!(s, DataType::PtypString("Réponse".to_string()));
+        assert_ne!(s, DataType::PtypString("Réponse".to_string()));
     }
 }
