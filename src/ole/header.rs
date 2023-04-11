@@ -135,15 +135,17 @@ impl<'ole> super::ole::Reader<'ole> {
         let relative_offset = sec_id * sec_size;
 
         // check if we need to read more data
-        if buffer.len() <= relative_offset + sec_size {
-          let new_len = (sec_id + 1) * sec_size;
+        if buffer.len() < relative_offset + sec_size {
+          let old_len = buffer.len();
+          let new_len = relative_offset + sec_size;
           buffer.resize(new_len, 0xFFu8);
-          self.read(&mut buffer[relative_offset
-            .. relative_offset + sec_size])?;
+          self.read(&mut buffer[old_len..new_len])?;
         }
+
         total_sec_id_read += self.read_sec_ids(&buffer[relative_offset
           .. relative_offset + sec_size - 4], total_sec_id_read);
-        sec_id = usize::from_slice(&buffer[buffer.len() - 4 ..]);
+        sec_id = usize::from_slice(&buffer[relative_offset + sec_size - 4
+          .. relative_offset + sec_size]);
       }
         // save the buffer for later usage
         self.body = Some(buffer);
