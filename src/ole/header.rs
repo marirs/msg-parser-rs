@@ -129,6 +129,7 @@ impl<'ole> super::ole::Reader<'ole> {
       let sec_size = *self.sec_size.as_ref().unwrap();
       let mut sec_id = usize::from_slice(&header[68..72]);
       let mut buffer = vec![0u8; 0];
+      let mut steps_since_last_resize = 0;
 
 
       while sec_id != super::constants::END_OF_CHAIN_SECID_U32 as usize {
@@ -140,12 +141,19 @@ impl<'ole> super::ole::Reader<'ole> {
           let new_len = relative_offset + sec_size;
           buffer.resize(new_len, 0xFFu8);
           self.read(&mut buffer[old_len..new_len])?;
+          steps_since_last_resize = 0;
         }
 
         total_sec_id_read += self.read_sec_ids(&buffer[relative_offset
           .. relative_offset + sec_size - 4], total_sec_id_read);
         sec_id = usize::from_slice(&buffer[relative_offset + sec_size - 4
           .. relative_offset + sec_size]);
+
+        steps_since_last_resize += 1;
+        if steps_since_last_resize * sec_size > buffer.len() {
+          // There is a loop in the MSAT chain
+          return Err(super::error::Error::InvalidOLEFile);
+        }
       }
         // save the buffer for later usage
         self.body = Some(buffer);
