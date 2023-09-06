@@ -131,7 +131,7 @@ impl Outlook {
     fn extract_cc_from_headers(header_text: &str) -> Vec<Person> {
         // Format in header is:
         // CC: NAME <EMAIL>, NAME <EMAIL> \r\n
-        let re = Regex::new(r"(?im)CC: .*(\r\n\t)?.*\r\n").unwrap();
+        let re = Regex::new(r"(?im)^CC: .*(\r\n\t)?.*\r\n").unwrap();
         let caps = re.captures(header_text);
         if caps.is_none() {
             return vec![];
