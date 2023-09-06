@@ -49,16 +49,16 @@ impl TransportHeaders {
         Self {
             content_type: Self::extract_field(
                 text,
-                Regex::new(r"(?i)Content-Type: (.*(\n\s.*)*)\r\n").unwrap(),
+                Regex::new(r"(?im)^Content-Type: (.*(\n\s.*)*)\r\n").unwrap(),
             ),
             date: Self::extract_field(&text, Regex::new(r"(?i)Date: (.*(\n\s.*)*)\r\n").unwrap()),
             message_id: Self::extract_field(
                 text,
-                Regex::new(r"(?i)Message-ID: (.*(\n\s.*)*)\r\n").unwrap(),
+                Regex::new(r"(?im)^Message-ID: (.*(\n\s.*)*)\r\n").unwrap(),
             ),
             reply_to: Self::extract_field(
                 text,
-                Regex::new(r"(?i)Reply-To: (.*(\n\s.*)*)\r\n").unwrap(),
+                Regex::new(r"(?im)^Reply-To: (.*(\n\s.*)*)\r\n").unwrap(),
             ),
         }
     }
@@ -131,7 +131,7 @@ impl Outlook {
     fn extract_cc_from_headers(header_text: &str) -> Vec<Person> {
         // Format in header is:
         // CC: NAME <EMAIL>, NAME <EMAIL> \r\n
-        let re = Regex::new(r"(?i)CC: .*(\r\n\t)?.*\r\n").unwrap();
+        let re = Regex::new(r"(?im)^CC: .*(\r\n\t)?.*\r\n").unwrap();
         let caps = re.captures(header_text);
         if caps.is_none() {
             return vec![];
