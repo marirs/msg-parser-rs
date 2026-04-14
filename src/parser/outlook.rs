@@ -28,6 +28,7 @@ static RE_REPLY_TO: LazyLock<Regex> =
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TransportHeaders {
+    pub raw: String,
     pub content_type: String,
     pub date: String,
     pub message_id: String,
@@ -46,6 +47,7 @@ impl TransportHeaders {
 
     pub fn create_from_headers_text(text: &str) -> Self {
         Self {
+            raw: text.to_string(),
             content_type: Self::extract_field(text, &RE_CONTENT_TYPE),
             date: Self::extract_field(text, &RE_DATE),
             message_id: Self::extract_field(text, &RE_MESSAGE_ID),
@@ -246,15 +248,11 @@ mod tests {
 
         let header = TransportHeaders::create_from_headers_text(&transport_text);
 
-        assert_eq!(
-            header,
-            TransportHeaders {
-                content_type: String::new(),
-                date: String::new(),
-                message_id: String::new(),
-                reply_to: String::new()
-            }
-        );
+        assert!(header.raw.is_empty());
+        assert!(header.content_type.is_empty());
+        assert!(header.date.is_empty());
+        assert!(header.message_id.is_empty());
+        assert!(header.reply_to.is_empty());
     }
 
     #[test]
@@ -314,15 +312,8 @@ mod tests {
 
         assert_eq!(outlook.subject, String::from("Test Email"));
 
-        assert_eq!(
-            outlook.headers,
-            TransportHeaders {
-                content_type: String::new(),
-                date: String::new(),
-                message_id: String::new(),
-                reply_to: String::new(),
-            }
-        );
+        assert!(outlook.headers.raw.is_empty());
+        assert!(outlook.headers.content_type.is_empty());
 
         assert!(outlook.body.starts_with("Test Email\r\n"));
         assert!(outlook.rtf_compressed.starts_with("51210000c8a200004c5a4"));
@@ -522,16 +513,17 @@ mod tests {
 
         assert!(outlook.bcc.is_empty());
         assert_eq!(outlook.subject, String::from("Test for TIF files"));
+        assert!(!outlook.headers.raw.is_empty());
         assert_eq!(
-            outlook.headers,
-            TransportHeaders {
-                content_type: "multipart/mixed; boundary=001a113392ecbd7a5404eb6f4d6a".to_string(),
-                date: "Mon, 18 Nov 2013 10:26:24 +0200".to_string(),
-                message_id: "<CADtJ4eNjQSkGcBtVteCiTF+YFG89+AcHxK3QZ=-Mt48xygkvdQ@mail.gmail.com>"
-                    .to_string(),
-                reply_to: String::from("")
-            }
+            outlook.headers.content_type,
+            "multipart/mixed; boundary=001a113392ecbd7a5404eb6f4d6a"
         );
+        assert_eq!(outlook.headers.date, "Mon, 18 Nov 2013 10:26:24 +0200");
+        assert_eq!(
+            outlook.headers.message_id,
+            "<CADtJ4eNjQSkGcBtVteCiTF+YFG89+AcHxK3QZ=-Mt48xygkvdQ@mail.gmail.com>"
+        );
+        assert!(outlook.headers.reply_to.is_empty());
         assert!(outlook.rtf_compressed.starts_with("bc020000b908"));
     }
 
