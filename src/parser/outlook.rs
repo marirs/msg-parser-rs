@@ -27,6 +27,7 @@ static RE_CC: LazyLock<Regex> =
 
 // TransportHeaders contains transport specific message
 // envelope information for the email.
+#[non_exhaustive]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TransportHeaders {
     pub content_type: String,
@@ -56,6 +57,7 @@ impl TransportHeaders {
 }
 
 // Person represents either Sender or Receiver.
+#[non_exhaustive]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Person {
     pub name: Name,
@@ -79,6 +81,7 @@ impl Person {
 }
 
 // Attachment represents attachment object in the mail.
+#[non_exhaustive]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Attachment {
     pub display_name: String, // "DisplayName"
@@ -105,6 +108,7 @@ impl Attachment {
 // MS-OXPROPS.
 // https://docs.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxprops/f6ab1613-aefe-447d-a49c-18217230b148
 // Note: Prefixes are omitted for brevity.
+#[non_exhaustive]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Outlook {
     pub headers: TransportHeaders,    // "TransportMessageHeader"
