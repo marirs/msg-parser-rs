@@ -236,6 +236,16 @@ impl Storages {
         })
     }
 
+    pub fn get_bytes_from_attachment(&self, idx: usize, key: &str) -> Vec<u8> {
+        self.attachments
+            .get(idx)
+            .and_then(|attach| match attach.get(key) {
+                Some(DataType::PtypBinary(bytes)) => Some(bytes.clone()),
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
+
     pub fn get_val_from_attachment_or_default(&self, idx: usize, key: &str) -> String {
         self.attachments
             .get(idx)

@@ -83,19 +83,24 @@ impl Person {
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Attachment {
-    pub display_name: String,   // "DisplayName"
-    pub payload: String,        // "AttachDataObject"
-    pub extension: String,      // "AttachExtension"
-    pub mime_tag: String,       // "AttachMimeTag"
-    pub file_name: String,      // "AttachFilename" (8.3 short name)
+    pub display_name: String, // "DisplayName"
+    pub payload: String,      // "AttachDataObject" (hex-encoded)
+    #[serde(with = "hex")]
+    pub payload_bytes: Vec<u8>, // "AttachDataObject" (raw bytes)
+    pub extension: String,    // "AttachExtension"
+    pub mime_tag: String,     // "AttachMimeTag"
+    pub file_name: String,    // "AttachFilename" (8.3 short name)
     pub long_file_name: String, // "AttachLongFilename" (full name)
 }
 
 impl Attachment {
     fn create(storages: &Storages, idx: usize) -> Self {
+        let payload_bytes = storages.get_bytes_from_attachment(idx, "AttachDataObject");
+        let payload = hex::encode(&payload_bytes);
         Self {
             display_name: storages.get_val_from_attachment_or_default(idx, "DisplayName"),
-            payload: storages.get_val_from_attachment_or_default(idx, "AttachDataObject"),
+            payload,
+            payload_bytes,
             extension: storages.get_val_from_attachment_or_default(idx, "AttachExtension"),
             mime_tag: storages.get_val_from_attachment_or_default(idx, "AttachMimeTag"),
             file_name: storages.get_val_from_attachment_or_default(idx, "AttachFilename"),
@@ -441,6 +446,29 @@ mod tests {
                 "image002.jpg".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn test_payload_bytes() {
+        let outlook = Outlook::from_path("data/attachment.msg").unwrap();
+
+        // payload_bytes contains raw binary, payload contains hex encoding
+        for attach in &outlook.attachments {
+            assert_eq!(attach.payload, hex::encode(&attach.payload_bytes));
+        }
+
+        // Verify magic bytes: DOC (OLE), PNG, JPEG
+        assert_eq!(
+            &outlook.attachments[0].payload_bytes[..4],
+            b"\xd0\xcf\x11\xe0"
+        );
+        assert_eq!(&outlook.attachments[1].payload_bytes[..4], b"\x89PNG");
+        assert_eq!(&outlook.attachments[2].payload_bytes[..2], b"\xff\xd8");
+
+        // Non-empty
+        assert!(!outlook.attachments[0].payload_bytes.is_empty());
+        assert!(!outlook.attachments[1].payload_bytes.is_empty());
+        assert!(!outlook.attachments[2].payload_bytes.is_empty());
     }
 
     #[test]
