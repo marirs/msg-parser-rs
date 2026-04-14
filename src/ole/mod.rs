@@ -31,6 +31,7 @@
 //! extracted_file.write_all(&buffer[..]);
 //! ```
 
+#[allow(clippy::module_inception)]
 mod ole;
 pub use ole::Reader;
 
@@ -40,10 +41,10 @@ pub(crate) use iterator::OLEIterator;
 mod error;
 pub use error::Error;
 
-pub(crate) mod header;
-pub(crate) mod util;
-pub(crate) mod sat;
 pub(crate) mod constants;
+pub(crate) mod header;
+pub(crate) mod sat;
+pub(crate) mod util;
 
 pub mod entry;
 pub use entry::Entry;

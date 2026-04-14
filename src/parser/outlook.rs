@@ -1,21 +1,14 @@
-use std::{
-    fs::File,
-    path::Path
-};
+use std::{fs::File, path::Path};
 
 use regex::Regex;
 
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 use crate::ole;
 
 use super::{
     error::Error,
-    storage::{
-        Properties,
-        Storages
-    }
+    storage::{Properties, Storages},
 };
 
 type Name = String;
@@ -33,7 +26,7 @@ pub struct TransportHeaders {
 
 impl TransportHeaders {
     fn extract_field(text: &str, re: Regex) -> String {
-        if text.len() == 0 {
+        if text.is_empty() {
             return String::from("");
         }
         let caps = re.captures(text);
@@ -51,7 +44,7 @@ impl TransportHeaders {
                 text,
                 Regex::new(r"(?im)^Content-Type: (.*(\n\s.*)*)\r\n").unwrap(),
             ),
-            date: Self::extract_field(&text, Regex::new(r"(?i)Date: (.*(\n\s.*)*)\r\n").unwrap()),
+            date: Self::extract_field(text, Regex::new(r"(?i)Date: (.*(\n\s.*)*)\r\n").unwrap()),
             message_id: Self::extract_field(
                 text,
                 Regex::new(r"(?im)^Message-ID: (.*(\n\s.*)*)\r\n").unwrap(),
@@ -81,7 +74,7 @@ impl Person {
         let email = email_keys
             .iter()
             .map(|&key| props.get(key).map_or(String::new(), |x| x.into()))
-            .find(|x| x.len() > 0)
+            .find(|x| !x.is_empty())
             .unwrap_or(String::from(""));
         Self { name, email }
     }
@@ -302,10 +295,7 @@ mod tests {
             ]
         );
 
-        assert_eq!(
-            outlook.subject,
-            String::from("Test Email")
-        );
+        assert_eq!(outlook.subject, String::from("Test Email"));
 
         assert_eq!(
             outlook.headers,
@@ -317,12 +307,7 @@ mod tests {
             }
         );
 
-        assert_eq!(
-            outlook
-                .body
-                .starts_with("Test Email\r\n"),
-            true
-        );
+        assert_eq!(outlook.body.starts_with("Test Email\r\n"), true);
         assert_eq!(
             outlook.rtf_compressed.starts_with("51210000c8a200004c5a4"),
             true
@@ -369,17 +354,9 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(
-            outlook.subject,
-            String::from("Test Email")
-        );
+        assert_eq!(outlook.subject, String::from("Test Email"));
 
-        assert_eq!(
-            outlook
-                .body
-                .starts_with("Test Email"),
-            true
-        );
+        assert_eq!(outlook.body.starts_with("Test Email"), true);
 
         assert_eq!(outlook.attachments.len(), 3);
         // Check displaynames
@@ -412,14 +389,7 @@ mod tests {
             .iter()
             .map(|x| x.mime_tag.clone())
             .collect();
-        assert_eq!(
-            mimes,
-            vec![
-                "".to_string(),
-                "".to_string(),
-                "".to_string()
-            ]
-        );
+        assert_eq!(mimes, vec!["".to_string(), "".to_string(), "".to_string()]);
         // Check filenames
         let filenames: Vec<String> = outlook
             .attachments
@@ -572,10 +542,7 @@ mod tests {
         let path = "data/test_email.msg";
         let outlook = Outlook::from_path(path).unwrap();
 
-        assert_eq!(
-            outlook.cc,
-            vec![]
-        );
+        assert_eq!(outlook.cc, vec![]);
     }
 
     #[test]

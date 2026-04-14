@@ -1,17 +1,10 @@
-use std::{
-    collections::HashMap,
-    u32::MAX,
-};
+use std::collections::HashMap;
 
 use hex::decode;
 
 use crate::ole::{Entry, EntryType, Reader};
 
-use super::{
-    constants::PropIdNameMap,
-    decode::DataType,
-    stream::Stream
-};
+use super::{constants::PropIdNameMap, decode::DataType, stream::Stream};
 
 // StorageType refers to major components in Message object.
 // Refer to MS-OXPROPS 1.3.3
@@ -35,8 +28,8 @@ impl StorageType {
         let mut base = 1u32;
         let mut sum = 0u32;
         for &num in decoded.iter().rev() {
-            sum = sum + num as u32 * base;
-            if base >= MAX / 256 {
+            sum += num as u32 * base;
+            if base >= u32::MAX / 256 {
                 break;
             }
             base *= 256;
@@ -116,10 +109,8 @@ pub struct Storages {
 
 impl Storages {
     fn to_arr(map: HashMap<u32, Properties>) -> Vec<Properties> {
-        let mut tuples: Vec<(u32, Properties)> = map
-            .into_iter()
-            .map(|(k, v)| (k, v))
-            .collect::<Vec<(u32, Properties)>>();
+        let mut tuples: Vec<(u32, Properties)> =
+            map.into_iter().collect::<Vec<(u32, Properties)>>();
         tuples.sort_by(|a, b| a.0.cmp(&b.0));
         tuples.into_iter().map(|x| x.1).collect::<Vec<Properties>>()
     }
@@ -137,7 +128,7 @@ impl Storages {
             if let EntryType::UserStream = entry._type() {
                 // Decode stream from slice.
                 // Skip if failed.
-                let stream_res = self.create_stream(&parser, &entry);
+                let stream_res = self.create_stream(parser, entry);
                 if stream_res.is_none() {
                     continue;
                 }
@@ -149,11 +140,11 @@ impl Storages {
                         self.root.insert(stream.key, stream.value);
                     }
                     StorageType::Recipient(id) => {
-                        let recipient_map = recipients_map.entry(id).or_insert(HashMap::new());
+                        let recipient_map = recipients_map.entry(id).or_default();
                         (*recipient_map).insert(stream.key, stream.value);
                     }
                     StorageType::Attachment(id) => {
-                        let attachment_map = attachments_map.entry(id).or_insert(HashMap::new());
+                        let attachment_map = attachments_map.entry(id).or_default();
                         (*attachment_map).insert(stream.key, stream.value);
                     }
                 }
@@ -185,10 +176,9 @@ impl Storages {
 
     pub fn get_val_from_attachment_or_default(&self, idx: usize, key: &str) -> String {
         self.attachments
-            .iter()
-            .nth(idx)
+            .get(idx)
             .map(|attach| attach.get(key).map_or(String::from(""), |x| x.into()))
-            .unwrap_or(String::new())
+            .unwrap_or_default()
     }
 }
 
@@ -201,7 +191,6 @@ mod tests {
 
     #[test]
     fn test_storage_type_convert() {
-        use std::u32::MAX;
         let mut id = StorageType::convert_id_to_u32("00000001");
         assert_eq!(id, Some(1u32));
 
@@ -212,7 +201,7 @@ mod tests {
         assert_eq!(id, Some(257u32));
 
         id = StorageType::convert_id_to_u32("FFFFFFFF");
-        assert_eq!(id, Some(MAX));
+        assert_eq!(id, Some(u32::MAX));
 
         // Edge Cases
         id = StorageType::convert_id_to_u32("HELLO");
@@ -305,14 +294,15 @@ mod tests {
         let mut storages = Storages::new(&parser);
         storages.process_streams(&parser);
 
-
         // Check attachment
         assert_eq!(storages.attachments.len(), 3);
 
         let attachment_name = storages.attachments[0].get("DisplayName");
         assert_eq!(
             attachment_name,
-            Some(&DataType::PtypString("1 Days Left—35% off cloud space, upgrade now!".to_string()))
+            Some(&DataType::PtypString(
+                "1 Days Left—35% off cloud space, upgrade now!".to_string()
+            ))
         );
 
         let attachment_name = storages.attachments[1].get("AttachFilename");
@@ -330,6 +320,9 @@ mod tests {
         // Check recipients
         assert_eq!(storages.recipients.len(), 6);
         let display_name = storages.recipients[1].get("DisplayName").unwrap();
-        assert_eq!(display_name, &DataType::PtypString("Sriram Govindan".to_string()));
+        assert_eq!(
+            display_name,
+            &DataType::PtypString("Sriram Govindan".to_string())
+        );
     }
 }

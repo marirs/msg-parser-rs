@@ -1,7 +1,5 @@
 use std::io::Read;
 
-use hex;
-
 use crate::ole::EntrySlice;
 
 use super::error::{DataTypeError, Error};
@@ -31,7 +29,7 @@ pub struct PtypDecoder {}
 impl PtypDecoder {
     pub fn decode(entry_slice: &mut EntrySlice, code: &str) -> Result<DataType, Error> {
         let mut buff = vec![0u8; entry_slice.len()];
-        entry_slice.read(&mut buff)?;
+        entry_slice.read_exact(&mut buff)?;
         match code {
             "0x001E" => decode_ptypascii(buff),
             "0x001F" => decode_ptypstring(&buff),
@@ -48,23 +46,17 @@ fn decode_ptypascii(buff: Vec<u8>) -> Result<DataType, Error> {
     }
 }
 
-fn decode_ptypbinary(buff: &Vec<u8>) -> Result<DataType, Error> {
+fn decode_ptypbinary(buff: &[u8]) -> Result<DataType, Error> {
     Ok(DataType::PtypBinary(buff.to_vec()))
 }
 
-fn decode_ptypstring(buff: &Vec<u8>) -> Result<DataType, Error> {
+fn decode_ptypstring(buff: &[u8]) -> Result<DataType, Error> {
     // PtypString
     // Byte sequence is in little-endian format
     // Use UTF-16 String decode
     let mut buff_iter = buff.iter();
     let mut buffu16 = Vec::new();
-    loop {
-        let c1 = match buff_iter.next() {
-            Some(c) => c,
-            None => {
-                break;
-            },
-        };
+    while let Some(c1) = buff_iter.next() {
         let duo = match buff_iter.next() {
             Some(c2) => [*c1, *c2],
             None => [*c1, 0_u8],
@@ -80,7 +72,7 @@ fn decode_ptypstring(buff: &Vec<u8>) -> Result<DataType, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DataType, PtypDecoder, decode_ptypstring};
+    use super::{decode_ptypstring, DataType, PtypDecoder};
     use crate::ole::Reader;
 
     #[test]
@@ -116,7 +108,9 @@ mod tests {
 
     #[test]
     fn test_decode_ptypstring_ascii() {
-        let raw_str = vec![0x51, 0x00, 0x77, 0x00, 0x65, 0x00, 0x72, 0x00, 0x74, 0x00, 0x79, 0x00, 0x21, 0x00];
+        let raw_str = vec![
+            0x51, 0x00, 0x77, 0x00, 0x65, 0x00, 0x72, 0x00, 0x74, 0x00, 0x79, 0x00, 0x21, 0x00,
+        ];
         let res = decode_ptypstring(&raw_str);
         assert!(res.is_ok());
         let s = res.unwrap();
@@ -125,7 +119,9 @@ mod tests {
 
     #[test]
     fn test_decode_ptypstring_non_ascii() {
-        let raw_str = vec![0x52, 0x00, 0xe9, 0x00, 0x70, 0x00, 0x6f, 0x00, 0x6e, 0x00, 0x73, 0x00, 0x65, 0x00];
+        let raw_str = vec![
+            0x52, 0x00, 0xe9, 0x00, 0x70, 0x00, 0x6f, 0x00, 0x6e, 0x00, 0x73, 0x00, 0x65, 0x00,
+        ];
         let res = decode_ptypstring(&raw_str);
         assert!(res.is_ok());
         let s = res.unwrap();
@@ -135,7 +131,10 @@ mod tests {
 
     #[test]
     fn test_decode_ptypstring_grapheme_clusters() {
-        let raw_str = vec![0x52, 0x00, 0x65, 0x00, 0x01, 0x03, 0x70, 0x00, 0x6f, 0x00, 0x6e, 0x00, 0x73, 0x00, 0x65, 0x00];
+        let raw_str = vec![
+            0x52, 0x00, 0x65, 0x00, 0x01, 0x03, 0x70, 0x00, 0x6f, 0x00, 0x6e, 0x00, 0x73, 0x00,
+            0x65, 0x00,
+        ];
         let res = decode_ptypstring(&raw_str);
         assert!(res.is_ok());
         let s = res.unwrap();

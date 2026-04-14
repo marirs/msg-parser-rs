@@ -1,6 +1,4 @@
-use std::{
-    io,
-};
+use std::io;
 
 use serde_json::Error as SerdeError;
 
@@ -26,14 +24,14 @@ impl std::fmt::Display for DataTypeError {
                 write!(
                     f,
                     "DataTypeError: Unable to decode bytes into UTF-8 string {}",
-                    err.to_string()
+                    err
                 )
             }
             DataTypeError::Utf16Err(ref err) => {
                 write!(
                     f,
                     "DataTypeError: Unable to decode bytes into UTF-16 string {}",
-                    err.to_string()
+                    err
                 )
             }
         }

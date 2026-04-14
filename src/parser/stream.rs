@@ -20,15 +20,15 @@ impl Stream {
     fn extract_id_and_datatype(name: &str) -> (String, String) {
         let tag = name
             .split("_")
-            .filter(|&x| x.len() > 0)
+            .filter(|&x| !x.is_empty())
             .collect::<Vec<&str>>()[1];
         let prop_id = String::from("0x") + &tag[..4];
         let prop_datatype = String::from("0x") + &tag[tag.len() - 4..];
-        return (prop_id, prop_datatype);
+        (prop_id, prop_datatype)
     }
 
     fn is_stream(name: &str) -> bool {
-        return name.starts_with("__substg1.0");
+        name.starts_with("__substg1.0")
     }
 
     pub fn create(
