@@ -23,15 +23,23 @@ static RE_MESSAGE_ID: LazyLock<Regex> =
 static RE_REPLY_TO: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?im)^Reply-To: (.*(\n\s.*)*)\r\n").unwrap());
 
-// TransportHeaders contains transport specific message
-// envelope information for the email.
+/// SMTP transport headers from the message envelope.
+///
+/// Contains a few commonly-used headers extracted via regex, plus the full
+/// raw header text for custom parsing. Messages that were never sent via
+/// SMTP (e.g. drafts) will have all fields empty.
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TransportHeaders {
+    /// The full, unparsed transport header text.
     pub raw: String,
+    /// The `Content-Type` header value.
     pub content_type: String,
+    /// The `Date` header value.
     pub date: String,
+    /// The `Message-ID` header value.
     pub message_id: String,
+    /// The `Reply-To` header value.
     pub reply_to: String,
 }
 
@@ -45,6 +53,7 @@ impl TransportHeaders {
             .unwrap_or_default()
     }
 
+    /// Parse transport headers from raw header text.
     pub fn create_from_headers_text(text: &str) -> Self {
         Self {
             raw: text.to_string(),
@@ -56,11 +65,13 @@ impl TransportHeaders {
     }
 }
 
-// Person represents either Sender or Receiver.
+/// A person referenced in the message (sender, recipient, CC, or BCC).
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Person {
+    /// Display name (e.g. `"John Doe"`).
     pub name: Name,
+    /// SMTP email address (e.g. `"john@example.com"`).
     pub email: Email,
 }
 
@@ -81,19 +92,44 @@ impl Person {
     }
 }
 
-// Attachment represents attachment object in the mail.
+/// A file attachment on the message.
+///
+/// # Saving an attachment to disk
+///
+/// ```no_run
+/// # let outlook = msg_parser::Outlook::from_path("email.msg").unwrap();
+/// for attach in &outlook.attachments {
+///     let name = if attach.long_file_name.is_empty() {
+///         &attach.file_name
+///     } else {
+///         &attach.long_file_name
+///     };
+///     std::fs::write(name, &attach.payload_bytes).unwrap();
+/// }
+/// ```
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Attachment {
-    pub display_name: String, // "DisplayName"
-    pub payload: String,      // "AttachDataObject" (hex-encoded)
+    /// Display name shown in the mail client.
+    pub display_name: String,
+    /// Attachment content as a hex-encoded string. Use [`payload_bytes`](Attachment::payload_bytes) for raw bytes.
+    pub payload: String,
+    /// Attachment content as raw bytes. Identical data to `payload`, just not hex-encoded.
     #[serde(with = "hex")]
-    pub payload_bytes: Vec<u8>, // "AttachDataObject" (raw bytes)
-    pub extension: String,    // "AttachExtension"
-    pub mime_tag: String,     // "AttachMimeTag"
-    pub file_name: String,    // "AttachFilename" (8.3 short name)
-    pub long_file_name: String, // "AttachLongFilename" (full name)
-    pub attach_method: u32,   // "AttachMethod" (0x3705) 1=by_value, 5=embedded_msg, 6=ole
+    pub payload_bytes: Vec<u8>,
+    /// File extension including the dot (e.g. `".pdf"`).
+    pub extension: String,
+    /// MIME type (e.g. `"image/png"`). May be empty.
+    pub mime_tag: String,
+    /// Short 8.3 filename (e.g. `"docume~1.pdf"`).
+    pub file_name: String,
+    /// Full original filename (e.g. `"document_final.pdf"`).
+    pub long_file_name: String,
+    /// How the attachment is stored. Common values:
+    /// - `1` — by value (regular file, bytes in `payload_bytes`)
+    /// - `5` — embedded message (nested `.msg`)
+    /// - `6` — OLE object
+    pub attach_method: u32,
 }
 
 impl Attachment {
@@ -115,31 +151,67 @@ impl Attachment {
     }
 }
 
-// Outlook is the Mail container.
-// Each field corresponds to a field listed in
-// MS-OXPROPS.
-// https://docs.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxprops/f6ab1613-aefe-447d-a49c-18217230b148
-// Note: Prefixes are omitted for brevity.
+/// A parsed Outlook `.msg` email message.
+///
+/// Create an instance with [`from_path`](Outlook::from_path),
+/// [`from_slice`](Outlook::from_slice), or [`from_reader`](Outlook::from_reader),
+/// then access the message fields directly.
+///
+/// Field names follow the
+/// [MS-OXPROPS](https://docs.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxprops/f6ab1613-aefe-447d-a49c-18217230b148)
+/// specification.
+///
+/// # Example
+///
+/// ```no_run
+/// use msg_parser::Outlook;
+///
+/// let outlook = Outlook::from_path("email.msg").unwrap();
+/// println!("Subject: {}", outlook.subject);
+/// println!("From: {} <{}>", outlook.sender.name, outlook.sender.email);
+/// println!("To: {:?}", outlook.to);
+/// println!("CC: {:?}", outlook.cc);
+/// println!("BCC: {:?}", outlook.bcc);
+/// println!("Delivered: {}", outlook.message_delivery_time);
+/// println!("Attachments: {}", outlook.attachments.len());
+/// ```
 #[non_exhaustive]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Outlook {
-    pub headers: TransportHeaders,      // "TransportMessageHeader"
-    pub sender: Person,                 // "SenderName" , "SenderSmtpAddress"/"SenderEmailAddress"
-    pub to: Vec<Person>,                // RecipientType == 1
-    pub cc: Vec<Person>,                // RecipientType == 2
-    pub bcc: Vec<Person>,               // RecipientType == 3
-    pub subject: String,                // "Subject"
-    pub body: String,                   // "Body"
-    pub html: String,                   // "Html" (0x1013)
-    pub rtf_compressed: String,         // "RtfCompressed"
-    pub message_class: String,          // "MessageClass" (0x001A) e.g. "IPM.Note"
-    pub importance: u32,                // "Importance" (0x0017) 0=Low, 1=Normal, 2=High
-    pub sensitivity: u32, // "Sensitivity" (0x0036) 0=Normal, 1=Personal, 2=Private, 3=Confidential
-    pub client_submit_time: String, // "ClientSubmitTime" (0x0039) ISO 8601 UTC
-    pub message_delivery_time: String, // "MessageDeliveryTime" (0x0E06) ISO 8601 UTC
-    pub creation_time: String, // "CreationTime" (0x3007) ISO 8601 UTC
-    pub last_modification_time: String, // "LastModificationTime" (0x3008) ISO 8601 UTC
-    pub attachments: Vec<Attachment>, // See Attachment struct
+    /// SMTP transport headers. Empty for messages that were never sent.
+    pub headers: TransportHeaders,
+    /// Message sender.
+    pub sender: Person,
+    /// Primary recipients (`RecipientType = 1`).
+    pub to: Vec<Person>,
+    /// Carbon-copy recipients (`RecipientType = 2`).
+    pub cc: Vec<Person>,
+    /// Blind carbon-copy recipients (`RecipientType = 3`).
+    pub bcc: Vec<Person>,
+    /// Message subject line.
+    pub subject: String,
+    /// Plain-text body.
+    pub body: String,
+    /// HTML body. Empty if the message has no HTML representation.
+    pub html: String,
+    /// RTF compressed body (hex-encoded).
+    pub rtf_compressed: String,
+    /// Message class, typically `"IPM.Note"` for regular emails.
+    pub message_class: String,
+    /// Importance level: `0` = Low, `1` = Normal, `2` = High.
+    pub importance: u32,
+    /// Sensitivity level: `0` = Normal, `1` = Personal, `2` = Private, `3` = Confidential.
+    pub sensitivity: u32,
+    /// When the sender submitted the message (ISO 8601 UTC). Empty if unavailable.
+    pub client_submit_time: String,
+    /// When the message was delivered (ISO 8601 UTC). Empty if unavailable.
+    pub message_delivery_time: String,
+    /// When the message object was created (ISO 8601 UTC). Empty if unavailable.
+    pub creation_time: String,
+    /// When the message was last modified (ISO 8601 UTC). Empty if unavailable.
+    pub last_modification_time: String,
+    /// File attachments. See [`Attachment`] for details.
+    pub attachments: Vec<Attachment>,
 }
 
 impl Outlook {
@@ -195,6 +267,16 @@ impl Outlook {
         }
     }
 
+    /// Parse a `.msg` file from a filesystem path.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use msg_parser::Outlook;
+    ///
+    /// let outlook = Outlook::from_path("email.msg").unwrap();
+    /// println!("{}", outlook.subject);
+    /// ```
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let file = File::open(path)?;
         let parser = ole::Reader::new(file)?;
@@ -205,12 +287,35 @@ impl Outlook {
         Ok(outlook)
     }
 
+    /// Parse a `.msg` file from any [`Read`](std::io::Read) source.
+    ///
+    /// Reads the entire stream into memory, then parses. Useful for stdin,
+    /// network streams, or any non-seekable source.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use msg_parser::Outlook;
+    ///
+    /// let file = std::fs::File::open("email.msg").unwrap();
+    /// let outlook = Outlook::from_reader(file).unwrap();
+    /// ```
     pub fn from_reader<R: std::io::Read>(mut reader: R) -> Result<Self, Error> {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf)?;
         Self::from_slice(&buf)
     }
 
+    /// Parse a `.msg` file from a byte slice already in memory.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use msg_parser::Outlook;
+    ///
+    /// let bytes = std::fs::read("email.msg").unwrap();
+    /// let outlook = Outlook::from_slice(&bytes).unwrap();
+    /// ```
     pub fn from_slice(slice: &[u8]) -> Result<Self, Error> {
         let parser = ole::Reader::new(slice)?;
         let mut storages = Storages::new(&parser);
@@ -220,6 +325,17 @@ impl Outlook {
         Ok(outlook)
     }
 
+    /// Serialize the parsed message to a JSON string.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use msg_parser::Outlook;
+    ///
+    /// let outlook = Outlook::from_path("email.msg").unwrap();
+    /// let json = outlook.to_json().unwrap();
+    /// println!("{}", json);
+    /// ```
     pub fn to_json(&self) -> Result<String, Error> {
         Ok(serde_json::to_string(self)?)
     }

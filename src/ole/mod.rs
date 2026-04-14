@@ -8,27 +8,26 @@
 //!
 //! ## Example
 //!
-//! ```ignore
+//! ```rust,ignore
 //! use crate::ole::Reader;
 //! use std::io::{Read, Write};
 //!
-//! let mut file = std::fs::File::open("data/Thumbs.db").unwrap();
-//! let mut parser = Reader::new(file).unwrap();
+//! let parser = Reader::from_path("data/test_email.msg").unwrap();
 //!
 //! // Iterate through the entries
 //! for entry in parser.iterate() {
 //!     println!("{}", entry);
 //! }
 //!
-//! // We're going to extract a file from the OLE storage
+//! // Extract a stream from the OLE storage
 //! let entry = parser.iterate().next().unwrap();
 //! let mut slice = parser.get_entry_slice(entry).unwrap();
-//! let mut buffer = std::vec::Vec::<u8>::with_capacity(slice.len());
-//! slice.read_to_end(&mut buffer);
+//! let mut buffer = Vec::<u8>::with_capacity(slice.len());
+//! slice.read_to_end(&mut buffer).unwrap();
 //!
-//! // Saves the extracted file
+//! // Save the extracted stream
 //! let mut extracted_file = std::fs::File::create("./file.bin").unwrap();
-//! extracted_file.write_all(&buffer[..]);
+//! extracted_file.write_all(&buffer).unwrap();
 //! ```
 
 #[allow(clippy::module_inception)]

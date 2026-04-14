@@ -73,23 +73,20 @@ impl std::fmt::Display for EntryType {
     }
 }
 
-/// An entry in an OLE file.
+/// An entry in an OLE compound document.
 ///
-/// An entry means a stream or a storage.
-/// A stream is a file, and a storage is a folder.
+/// An entry is either a *stream* (file) or a *storage* (directory).
 ///
-/// # Basic Example
+/// # Example
 ///
-/// ```ignore
-/// use ole::Reader;
+/// ```rust,ignore
+/// use crate::ole::Reader;
 ///
-/// let mut parser =
-///       Reader::from_path("assets/Thumbs.db").unwrap();
-///
-/// let entry = parser.iterate().next().unwrap();
-/// println!("Name of the entry: {}", entry.name());
-/// println!("Type of the entry: {}", entry._type());
-/// println!("Size of the entry: {}", entry.len());
+/// let reader = Reader::from_path("data/test_email.msg").unwrap();
+/// let entry = reader.iterate().next().unwrap();
+/// println!("Name: {}", entry.name());
+/// println!("Type: {}", entry._type());
+/// println!("Size: {}", entry.len());
 /// ```
 #[derive(Debug)]
 pub struct Entry {
@@ -236,26 +233,23 @@ impl std::fmt::Display for Entry {
     }
 }
 
-/// Slice of the content of the entry.
+/// A readable slice of an entry's content.
 ///
-/// This is not an ordinary slice, because OLE files are like FAT system:
-/// they are based on sector and SAT. Therefore, a stream can be fragmented
-/// through the file.
+/// OLE files use a FAT-like sector allocation scheme, so a stream can be
+/// fragmented across non-contiguous sectors. `EntrySlice` reassembles these
+/// chunks and implements [`Read`](std::io::Read).
 ///
-/// # Basic example
+/// # Example
 ///
-/// ```ignore
-/// use ole::Reader;
+/// ```rust,ignore
+/// use crate::ole::Reader;
 /// use std::io::Read;
-/// let mut parser =
-///       Reader::from_path("assets/Thumbs.db").unwrap();
 ///
-/// let entry = parser.iterate().next().unwrap();
-/// let mut slice = parser.get_entry_slice(entry).unwrap();
-/// // Read the first 42 bytes of the entry;
+/// let reader = Reader::from_path("data/test_email.msg").unwrap();
+/// let entry = reader.iterate().next().unwrap();
+/// let mut slice = reader.get_entry_slice(entry).unwrap();
 /// let mut buf = [0u8; 42];
-/// let nread = slice.read(&mut buf).unwrap();
-///
+/// let n = slice.read(&mut buf).unwrap();
 /// ```
 pub struct EntrySlice<'s> {
     /// Chunk size, i.e. size of the sector.

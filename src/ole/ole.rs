@@ -1,19 +1,16 @@
-/// An OLE file reader.
+/// An OLE compound document reader.
 ///
-/// The parsing method follows the same method described here:
+/// The parsing method follows the specification described here:
 /// <http://www.openoffice.org/sc/compdocfileformat.pdf>
 ///
-/// # Basic Example
+/// # Example
 ///
-/// ```ignore
+/// ```rust,ignore
 /// use crate::ole::Reader;
 ///
-/// let mut reader =
-///       Reader::from_path("assets/Thumbs.db").unwrap();
-///
-/// println!("This OLE file stores the following entries: ");
+/// let reader = Reader::from_path("data/test_email.msg").unwrap();
 /// for entry in reader.iterate() {
-///   println!("{}", entry);
+///     println!("{}", entry);
 /// }
 /// ```
 pub struct Reader<'ole> {
@@ -61,14 +58,14 @@ pub struct Reader<'ole> {
 }
 
 impl<'ole> Reader<'ole> {
-    /// Constructs a new `Reader`.
+    /// Constructs a new `Reader` from any [`Read`](std::io::Read) source.
     ///
-    /// # Examples
+    /// # Example
     ///
-    /// ```ignore
-    /// use ole;
-    /// let mut my_resume = std::fs::File::open("assets/Thumbs.db").unwrap();
-    /// let mut parser = ole::Reader::new(my_resume).unwrap();
+    /// ```rust,ignore
+    /// use crate::ole::Reader;
+    /// let file = std::fs::File::open("data/test_email.msg").unwrap();
+    /// let reader = Reader::new(file).unwrap();
     /// ```
     pub fn new<T>(readable: T) -> std::result::Result<Reader<'ole>, super::error::Error>
     where
@@ -96,29 +93,28 @@ impl<'ole> Reader<'ole> {
         Ok(t)
     }
 
-    /// Constructs a new `Reader` from a file.
+    /// Constructs a new `Reader` from a file path.
     ///
-    /// # Examples
+    /// # Example
     ///
-    /// ```ignore
-    /// use ole;
-    /// let mut parser = ole::Reader::from_path("assets/Thumbs.db").unwrap();
+    /// ```rust,ignore
+    /// use crate::ole::Reader;
+    /// let reader = Reader::from_path("data/test_email.msg").unwrap();
     /// ```
     pub fn from_path(path: &str) -> Result<Reader<'_>, super::error::Error> {
         let f = std::fs::File::open(path).map_err(super::error::Error::IOError)?;
         Reader::new(f)
     }
 
-    /// Returns an iterator for directory entries of the OLE file.
+    /// Returns an iterator over the directory entries of the OLE file.
     ///
-    /// # Examples
+    /// # Example
     ///
-    /// ```ignore
-    /// use ole;
-    /// let mut parser = ole::Reader::from_path("assets/Thumbs.db").unwrap();
-    ///
-    /// for entry in parser.iterate() {
-    ///   println!("Entry {}", entry.name());
+    /// ```rust,ignore
+    /// use crate::ole::Reader;
+    /// let reader = Reader::from_path("data/test_email.msg").unwrap();
+    /// for entry in reader.iterate() {
+    ///     println!("Entry: {} ({})", entry.name(), entry._type());
     /// }
     /// ```
     pub fn iterate(&self) -> super::iterator::OLEIterator<'_> {
