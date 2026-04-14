@@ -22,8 +22,6 @@ static RE_MESSAGE_ID: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?im)^Message-ID: (.*(\n\s.*)*)\r\n").unwrap());
 static RE_REPLY_TO: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?im)^Reply-To: (.*(\n\s.*)*)\r\n").unwrap());
-static RE_CC: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?im)^CC: .*(\r\n\t)?.*\r\n").unwrap());
 
 // TransportHeaders contains transport specific message
 // envelope information for the email.
@@ -65,6 +63,7 @@ pub struct Person {
 }
 
 impl Person {
+    #[cfg(test)]
     fn new(name: Name, email: Email) -> Self {
         Self { name, email }
     }
@@ -113,9 +112,9 @@ impl Attachment {
 pub struct Outlook {
     pub headers: TransportHeaders,    // "TransportMessageHeader"
     pub sender: Person,               // "SenderName" , "SenderSmtpAddress"/"SenderEmailAddress"
-    pub to: Vec<Person>,              // "DisplayName", "SmtpAddress"/"EmailAddress"
-    pub cc: Vec<Person>,              // "DisplayCc"
-    pub bcc: Name,                    // "DisplayBcc"
+    pub to: Vec<Person>,              // RecipientType == 1
+    pub cc: Vec<Person>,              // RecipientType == 2
+    pub bcc: Vec<Person>,             // RecipientType == 3
     pub subject: String,              // "Subject"
     pub body: String,                 // "Body"
     pub html: String,                 // "Html" (0x1013)
@@ -124,44 +123,28 @@ pub struct Outlook {
 }
 
 impl Outlook {
-    fn extract_cc_from_headers(header_text: &str) -> Vec<Person> {
-        // Format in header is:
-        // CC: NAME <EMAIL>, NAME <EMAIL> \r\n
-        let caps = RE_CC.captures(header_text);
-        if caps.is_none() {
-            return vec![];
-        }
-        let cap = caps.unwrap().get(0).unwrap().as_str();
-        // Remove first 3 chars
-        // Split at ",", then trim and clean each string
-        // We should be left with ["NAME <EMAIL", "NAME <EMAIL"]
-        let cc_list = &cap[3..]
-            .split(",")
-            .map(|x| x.trim().replace('>', ""))
-            .collect::<Vec<String>>();
-
-        let mut cc_persons: Vec<Person> = vec![];
-        for cc in cc_list.iter() {
-            let name_email_pair: Vec<&str> = cc.split("<").map(|x| x.trim()).collect();
-            let person = if name_email_pair.len() < 2 {
-                // In the unlikely event that there's no email provided.
-                Person::new(name_email_pair[0].to_string(), String::new())
-            } else {
-                Person::new(
-                    name_email_pair[0].replace('"', ""),
-                    name_email_pair[1].to_string(),
-                )
-            };
-            cc_persons.push(person);
-        }
-        cc_persons
-    }
-
     fn populate(storages: &Storages) -> Self {
         let headers_text = storages.get_val_from_root_or_default("TransportMessageHeaders");
         let headers = TransportHeaders::create_from_headers_text(&headers_text);
 
-        // Outlook::extract_cc_from_headers(&headers_text);
+        let mut to = Vec::new();
+        let mut cc = Vec::new();
+        let mut bcc = Vec::new();
+
+        for (i, recip_map) in storages.recipients.iter().enumerate() {
+            let person = Person::create_from_props(
+                recip_map,
+                "DisplayName",
+                &["SmtpAddress", "EmailAddress"],
+            );
+            // RecipientType: 1=To, 2=CC, 3=BCC (MS-OXMSG 2.2.1)
+            match storages.get_recipient_int_prop(i, "RecipientType") {
+                Some(2) => cc.push(person),
+                Some(3) => bcc.push(person),
+                _ => to.push(person), // Default to To (including type==1 and missing)
+            }
+        }
+
         Self {
             headers,
             sender: Person::create_from_props(
@@ -169,19 +152,9 @@ impl Outlook {
                 "SenderName",
                 &["SenderSmtpAddress", "SenderEmailAddress"],
             ),
-            to: storages
-                .recipients
-                .iter()
-                .map(|recip_map| {
-                    Person::create_from_props(
-                        recip_map,
-                        "DisplayName",
-                        &["SmtpAddress", "EmailAddress"],
-                    )
-                })
-                .collect(),
-            cc: Outlook::extract_cc_from_headers(&headers_text),
-            bcc: storages.get_val_from_root_or_default("DisplayBcc"),
+            to,
+            cc,
+            bcc,
             subject: storages.get_val_from_root_or_default("Subject"),
             body: storages.get_val_from_root_or_default("Body"),
             html: storages.get_val_from_root_or_default("Html"),
@@ -268,13 +241,20 @@ mod tests {
                 email: "".to_string()
             }
         );
+
+        // RecipientType == 1 (To)
         assert_eq!(
             outlook.to,
+            vec![Person {
+                name: "marirs@outlook.com".to_string(),
+                email: "marirs@outlook.com".to_string()
+            }]
+        );
+
+        // RecipientType == 2 (CC)
+        assert_eq!(
+            outlook.cc,
             vec![
-                Person {
-                    name: "marirs@outlook.com".to_string(),
-                    email: "marirs@outlook.com".to_string()
-                },
                 Person {
                     name: "Sriram Govindan".to_string(),
                     email: "marirs@aol.in".to_string()
@@ -283,6 +263,13 @@ mod tests {
                     name: "marirs@outlook.in".to_string(),
                     email: "marirs@outlook.in".to_string()
                 },
+            ]
+        );
+
+        // RecipientType == 3 (BCC)
+        assert_eq!(
+            outlook.bcc,
+            vec![
                 Person {
                     name: "Sriram Govindan".to_string(),
                     email: "marirs@aol.in".to_string()
@@ -325,35 +312,9 @@ mod tests {
                 email: "".to_string()
             }
         );
-        assert_eq!(
-            outlook.to,
-            vec![
-                Person {
-                    name: "marirs@outlook.com".to_string(),
-                    email: "marirs@outlook.com".to_string()
-                },
-                Person {
-                    name: "Sriram Govindan".to_string(),
-                    email: "marirs@aol.in".to_string()
-                },
-                Person {
-                    name: "marirs@outlook.in".to_string(),
-                    email: "marirs@outlook.in".to_string()
-                },
-                Person {
-                    name: "Sriram Govindan".to_string(),
-                    email: "marirs@aol.in".to_string()
-                },
-                Person {
-                    name: "Sriram Govindan".to_string(),
-                    email: "marirs@outlook.com".to_string()
-                },
-                Person {
-                    name: "marirs@outlook.in".to_string(),
-                    email: "marirs@outlook.in".to_string()
-                },
-            ]
-        );
+        assert_eq!(outlook.to.len(), 1);
+        assert_eq!(outlook.cc.len(), 2);
+        assert_eq!(outlook.bcc.len(), 3);
         assert_eq!(outlook.subject, String::from("Test Email"));
 
         assert!(outlook.body.starts_with("Test Email"));
@@ -477,27 +438,25 @@ mod tests {
                 email: "brizhou@gmail.com".to_string()
             }
         );
+        // Recipient #0 is To
         assert_eq!(
             outlook.to,
-            vec![
-                Person {
-                    name: "brianzhou@me.com".to_string(),
-                    email: "brianzhou@me.com".to_string()
-                },
-                Person {
-                    name: "Brian Zhou".to_string(),
-                    email: "brizhou@gmail.com".to_string(),
-                }
-            ]
+            vec![Person {
+                name: "brianzhou@me.com".to_string(),
+                email: "brianzhou@me.com".to_string()
+            }]
         );
 
+        // Recipient #1 is CC
         assert_eq!(
             outlook.cc,
             vec![Person::new(
                 "Brian Zhou".to_string(),
                 "brizhou@gmail.com".to_string()
-            ),]
+            )]
         );
+
+        assert!(outlook.bcc.is_empty());
         assert_eq!(outlook.subject, String::from("Test for TIF files"));
         assert_eq!(
             outlook.headers,
@@ -538,11 +497,20 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_cc() {
+    fn test_recipient_types() {
         let path = "data/test_email.msg";
         let outlook = Outlook::from_path(path).unwrap();
 
-        assert_eq!(outlook.cc, vec![]);
+        // Verify recipient splitting by RecipientType
+        assert_eq!(outlook.to.len(), 1);
+        assert_eq!(outlook.cc.len(), 2);
+        assert_eq!(outlook.bcc.len(), 3);
+
+        // ascii.msg has only To recipients
+        let outlook = Outlook::from_path("data/ascii.msg").unwrap();
+        assert_eq!(outlook.to.len(), 1);
+        assert!(outlook.cc.is_empty());
+        assert!(outlook.bcc.is_empty());
     }
 
     #[test]

@@ -11,6 +11,7 @@ use super::error::{DataTypeError, Error};
 pub enum DataType {
     PtypString(String),
     PtypBinary(Vec<u8>),
+    PtypInteger32(u32),
 }
 
 impl From<&DataType> for String {
@@ -18,6 +19,7 @@ impl From<&DataType> for String {
         match *data {
             DataType::PtypBinary(ref bytes) => hex::encode(bytes),
             DataType::PtypString(ref string) => string.to_string(),
+            DataType::PtypInteger32(val) => val.to_string(),
         }
     }
 }

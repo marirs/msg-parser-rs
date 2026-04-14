@@ -121,18 +121,73 @@ impl Storages {
         Stream::create(entry.name(), &mut slice, self.prop_map, parent)
     }
 
+    /// Parse fixed-size properties from a __properties_version1.0 stream.
+    /// Non-root storages have an 8-byte header, then 16-byte entries.
+    /// Each entry: 4 bytes prop_tag (type u16 + id u16), 4 bytes flags, 8 bytes value.
+    fn parse_fixed_props(data: &[u8], prop_map: &PropIdNameMap, is_root: bool) -> Properties {
+        let header_size = if is_root { 32 } else { 8 };
+        let mut props = Properties::new();
+        if data.len() < header_size {
+            return props;
+        }
+        let mut offset = header_size;
+        while offset + 16 <= data.len() {
+            let prop_type = u16::from_le_bytes([data[offset], data[offset + 1]]);
+            let prop_id = u16::from_le_bytes([data[offset + 2], data[offset + 3]]);
+            let value_bytes = &data[offset + 8..offset + 16];
+
+            // Only handle PtypInteger32 (0x0003) for now
+            if prop_type == 0x0003 {
+                let id_str = format!("0x{:04X}", prop_id);
+                if let Some(name) = prop_map.get_canonical_name(&id_str) {
+                    let val = u32::from_le_bytes([
+                        value_bytes[0],
+                        value_bytes[1],
+                        value_bytes[2],
+                        value_bytes[3],
+                    ]);
+                    props.insert(name.to_string(), DataType::PtypInteger32(val));
+                }
+            }
+            offset += 16;
+        }
+        props
+    }
+
     pub fn process_streams(&mut self, parser: &Reader) {
         let mut recipients_map: HashMap<u32, Properties> = HashMap::new();
         let mut attachments_map: HashMap<u32, Properties> = HashMap::new();
         for entry in parser.iterate() {
             if let EntryType::UserStream = entry._type() {
-                // Decode stream from slice.
-                // Skip if failed.
-                let stream_res = self.create_stream(parser, entry);
-                if stream_res.is_none() {
+                // Parse __properties_version1.0 for fixed-size properties
+                if entry.name() == "__properties_version1.0"
+                    && let Some(parent) = self.storage_map.get_storage_type(entry.parent_node())
+                    && let Ok(mut slice) = parser.get_entry_slice(entry)
+                {
+                    let mut data = vec![0u8; slice.len()];
+                    if std::io::Read::read_exact(&mut slice, &mut data).is_ok() {
+                        let is_root = matches!(parent, StorageType::RootEntry);
+                        let fixed = Self::parse_fixed_props(&data, self.prop_map, is_root);
+                        match parent {
+                            StorageType::Recipient(id) => {
+                                recipients_map.entry(*id).or_default().extend(fixed);
+                            }
+                            StorageType::Attachment(id) => {
+                                attachments_map.entry(*id).or_default().extend(fixed);
+                            }
+                            StorageType::RootEntry => {
+                                self.root.extend(fixed);
+                            }
+                        }
+                    }
                     continue;
                 }
-                let stream = stream_res.unwrap();
+
+                // Decode stream from slice.
+                // Skip if failed.
+                let Some(stream) = self.create_stream(parser, entry) else {
+                    continue;
+                };
 
                 // Populate maps accordingly
                 match stream.parent {
@@ -172,6 +227,13 @@ impl Storages {
 
     pub fn get_val_from_root_or_default(&self, key: &str) -> String {
         self.root.get(key).map_or(String::new(), |x| x.into())
+    }
+
+    pub fn get_recipient_int_prop(&self, idx: usize, key: &str) -> Option<u32> {
+        self.recipients.get(idx).and_then(|r| match r.get(key) {
+            Some(DataType::PtypInteger32(v)) => Some(*v),
+            _ => None,
+        })
     }
 
     pub fn get_val_from_attachment_or_default(&self, idx: usize, key: &str) -> String {
