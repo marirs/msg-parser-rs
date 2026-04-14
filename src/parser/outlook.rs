@@ -114,6 +114,7 @@ pub struct Outlook {
     pub bcc: Name,                    // "DisplayBcc"
     pub subject: String,              // "Subject"
     pub body: String,                 // "Body"
+    pub html: String,                 // "Html" (0x1013)
     pub rtf_compressed: String,       // "RtfCompressed"
     pub attachments: Vec<Attachment>, // See Attachment struct
 }
@@ -179,6 +180,7 @@ impl Outlook {
             bcc: storages.get_val_from_root_or_default("DisplayBcc"),
             subject: storages.get_val_from_root_or_default("Subject"),
             body: storages.get_val_from_root_or_default("Body"),
+            html: storages.get_val_from_root_or_default("Html"),
             rtf_compressed: storages.get_val_from_root_or_default("RtfCompressed"),
             attachments: storages
                 .attachments
@@ -545,5 +547,23 @@ mod tests {
         let outlook = Outlook::from_path(path).unwrap();
         let json = outlook.to_json().unwrap();
         assert!(!json.is_empty());
+    }
+
+    #[test]
+    fn test_html_field_present() {
+        // test_email.msg has no Html property, so html should be empty
+        let outlook = Outlook::from_path("data/test_email.msg").unwrap();
+        assert!(outlook.html.is_empty());
+
+        // unicode.msg also has no Html property
+        let outlook = Outlook::from_path("data/unicode.msg").unwrap();
+        assert!(outlook.html.is_empty());
+    }
+
+    #[test]
+    fn test_html_in_json_output() {
+        let outlook = Outlook::from_path("data/test_email.msg").unwrap();
+        let json = outlook.to_json().unwrap();
+        assert!(json.contains("\"html\""));
     }
 }
