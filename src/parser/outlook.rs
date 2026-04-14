@@ -543,6 +543,31 @@ mod tests {
     }
 
     #[test]
+    fn test_ascii() {
+        let path = "data/ascii.msg";
+        let outlook = Outlook::from_path(path).unwrap();
+        assert_eq!(
+            outlook.sender,
+            Person {
+                name: "from@domain.com".to_string(),
+                email: "from@domain.com".to_string()
+            }
+        );
+        assert_eq!(
+            outlook.to,
+            vec![Person {
+                name: "to@domain.com".to_string(),
+                email: "to@domain.com".to_string()
+            },]
+        );
+
+        assert_eq!(
+            outlook.subject,
+            String::from("creating an outlook message file")
+        );
+    }
+
+    #[test]
     fn test_multiple_cc() {
         let path = "data/test_email.msg";
         let outlook = Outlook::from_path(path).unwrap();

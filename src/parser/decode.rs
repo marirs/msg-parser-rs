@@ -33,10 +33,18 @@ impl PtypDecoder {
         let mut buff = vec![0u8; entry_slice.len()];
         entry_slice.read(&mut buff)?;
         match code {
+            "0x001E" => decode_ptypascii(buff),
             "0x001F" => decode_ptypstring(&buff),
             "0x0102" => decode_ptypbinary(&buff),
             _ => Err(DataTypeError::UnknownCode(code.to_string()).into()),
         }
+    }
+}
+
+fn decode_ptypascii(buff: Vec<u8>) -> Result<DataType, Error> {
+    match String::from_utf8(buff) {
+        Ok(s) => Ok(DataType::PtypString(s)),
+        Err(err) => Err(DataTypeError::Utf8Err(err).into()),
     }
 }
 
