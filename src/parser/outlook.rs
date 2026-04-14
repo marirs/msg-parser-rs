@@ -117,16 +117,20 @@ impl Attachment {
 #[non_exhaustive]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Outlook {
-    pub headers: TransportHeaders,    // "TransportMessageHeader"
-    pub sender: Person,               // "SenderName" , "SenderSmtpAddress"/"SenderEmailAddress"
-    pub to: Vec<Person>,              // RecipientType == 1
-    pub cc: Vec<Person>,              // RecipientType == 2
-    pub bcc: Vec<Person>,             // RecipientType == 3
-    pub subject: String,              // "Subject"
-    pub body: String,                 // "Body"
-    pub html: String,                 // "Html" (0x1013)
-    pub rtf_compressed: String,       // "RtfCompressed"
-    pub attachments: Vec<Attachment>, // See Attachment struct
+    pub headers: TransportHeaders,      // "TransportMessageHeader"
+    pub sender: Person,                 // "SenderName" , "SenderSmtpAddress"/"SenderEmailAddress"
+    pub to: Vec<Person>,                // RecipientType == 1
+    pub cc: Vec<Person>,                // RecipientType == 2
+    pub bcc: Vec<Person>,               // RecipientType == 3
+    pub subject: String,                // "Subject"
+    pub body: String,                   // "Body"
+    pub html: String,                   // "Html" (0x1013)
+    pub rtf_compressed: String,         // "RtfCompressed"
+    pub client_submit_time: String,     // "ClientSubmitTime" (0x0039) ISO 8601 UTC
+    pub message_delivery_time: String,  // "MessageDeliveryTime" (0x0E06) ISO 8601 UTC
+    pub creation_time: String,          // "CreationTime" (0x3007) ISO 8601 UTC
+    pub last_modification_time: String, // "LastModificationTime" (0x3008) ISO 8601 UTC
+    pub attachments: Vec<Attachment>,   // See Attachment struct
 }
 
 impl Outlook {
@@ -166,6 +170,10 @@ impl Outlook {
             body: storages.get_val_from_root_or_default("Body"),
             html: storages.get_val_from_root_or_default("Html"),
             rtf_compressed: storages.get_val_from_root_or_default("RtfCompressed"),
+            client_submit_time: storages.get_val_from_root_or_default("ClientSubmitTime"),
+            message_delivery_time: storages.get_val_from_root_or_default("MessageDeliveryTime"),
+            creation_time: storages.get_val_from_root_or_default("CreationTime"),
+            last_modification_time: storages.get_val_from_root_or_default("LastModificationTime"),
             attachments: storages
                 .attachments
                 .iter()
@@ -555,6 +563,36 @@ mod tests {
         assert_eq!(outlook.to.len(), 1);
         assert!(outlook.cc.is_empty());
         assert!(outlook.bcc.is_empty());
+    }
+
+    #[test]
+    fn test_date_fields() {
+        // unicode.msg has all four date fields
+        let outlook = Outlook::from_path("data/unicode.msg").unwrap();
+        assert_eq!(outlook.client_submit_time, "2013-11-18T08:26:24Z");
+        assert_eq!(outlook.message_delivery_time, "2013-11-18T08:26:29Z");
+        assert!(outlook.creation_time.starts_with("2013-11-18T08:32:28"));
+        assert!(
+            outlook
+                .last_modification_time
+                .starts_with("2013-11-18T08:32:28")
+        );
+
+        // test_email.msg has delivery time but no submit time
+        let outlook = Outlook::from_path("data/test_email.msg").unwrap();
+        assert!(outlook.client_submit_time.is_empty());
+        assert!(
+            outlook
+                .message_delivery_time
+                .starts_with("2021-01-05T03:00:32")
+        );
+        assert!(outlook.creation_time.starts_with("2021-01-05T03:13:18"));
+
+        // ascii.msg has no submit/delivery times
+        let outlook = Outlook::from_path("data/ascii.msg").unwrap();
+        assert!(outlook.client_submit_time.is_empty());
+        assert!(outlook.message_delivery_time.is_empty());
+        assert!(outlook.creation_time.starts_with("2017-06-01T15:24:31"));
     }
 
     #[test]

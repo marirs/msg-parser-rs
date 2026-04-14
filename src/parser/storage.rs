@@ -136,17 +136,35 @@ impl Storages {
             let prop_id = u16::from_le_bytes([data[offset + 2], data[offset + 3]]);
             let value_bytes = &data[offset + 8..offset + 16];
 
-            // Only handle PtypInteger32 (0x0003) for now
-            if prop_type == 0x0003 {
-                let id_str = format!("0x{:04X}", prop_id);
-                if let Some(name) = prop_map.get_canonical_name(&id_str) {
-                    let val = u32::from_le_bytes([
-                        value_bytes[0],
-                        value_bytes[1],
-                        value_bytes[2],
-                        value_bytes[3],
-                    ]);
-                    props.insert(name.to_string(), DataType::PtypInteger32(val));
+            let id_str = format!("0x{:04X}", prop_id);
+            let name = prop_map.get_canonical_name(&id_str);
+            if let Some(name) = name {
+                match prop_type {
+                    // PtypInteger32
+                    0x0003 => {
+                        let val = u32::from_le_bytes([
+                            value_bytes[0],
+                            value_bytes[1],
+                            value_bytes[2],
+                            value_bytes[3],
+                        ]);
+                        props.insert(name.to_string(), DataType::PtypInteger32(val));
+                    }
+                    // PtypTime (FILETIME, 8 bytes)
+                    0x0040 => {
+                        let val = u64::from_le_bytes([
+                            value_bytes[0],
+                            value_bytes[1],
+                            value_bytes[2],
+                            value_bytes[3],
+                            value_bytes[4],
+                            value_bytes[5],
+                            value_bytes[6],
+                            value_bytes[7],
+                        ]);
+                        props.insert(name.to_string(), DataType::PtypTime(val));
+                    }
+                    _ => {}
                 }
             }
             offset += 16;
