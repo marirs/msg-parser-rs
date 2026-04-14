@@ -126,11 +126,14 @@ pub struct Outlook {
     pub body: String,                   // "Body"
     pub html: String,                   // "Html" (0x1013)
     pub rtf_compressed: String,         // "RtfCompressed"
-    pub client_submit_time: String,     // "ClientSubmitTime" (0x0039) ISO 8601 UTC
-    pub message_delivery_time: String,  // "MessageDeliveryTime" (0x0E06) ISO 8601 UTC
-    pub creation_time: String,          // "CreationTime" (0x3007) ISO 8601 UTC
+    pub message_class: String,          // "MessageClass" (0x001A) e.g. "IPM.Note"
+    pub importance: u32,                // "Importance" (0x0017) 0=Low, 1=Normal, 2=High
+    pub sensitivity: u32, // "Sensitivity" (0x0036) 0=Normal, 1=Personal, 2=Private, 3=Confidential
+    pub client_submit_time: String, // "ClientSubmitTime" (0x0039) ISO 8601 UTC
+    pub message_delivery_time: String, // "MessageDeliveryTime" (0x0E06) ISO 8601 UTC
+    pub creation_time: String, // "CreationTime" (0x3007) ISO 8601 UTC
     pub last_modification_time: String, // "LastModificationTime" (0x3008) ISO 8601 UTC
-    pub attachments: Vec<Attachment>,   // See Attachment struct
+    pub attachments: Vec<Attachment>, // See Attachment struct
 }
 
 impl Outlook {
@@ -170,6 +173,9 @@ impl Outlook {
             body: storages.get_val_from_root_or_default("Body"),
             html: storages.get_val_from_root_or_default("Html"),
             rtf_compressed: storages.get_val_from_root_or_default("RtfCompressed"),
+            message_class: storages.get_val_from_root_or_default("MessageClass"),
+            importance: storages.get_root_int_prop("Importance").unwrap_or(1),
+            sensitivity: storages.get_root_int_prop("Sensitivity").unwrap_or(0),
             client_submit_time: storages.get_val_from_root_or_default("ClientSubmitTime"),
             message_delivery_time: storages.get_val_from_root_or_default("MessageDeliveryTime"),
             creation_time: storages.get_val_from_root_or_default("CreationTime"),
@@ -599,6 +605,23 @@ mod tests {
         assert!(outlook.client_submit_time.is_empty());
         assert!(outlook.message_delivery_time.is_empty());
         assert!(outlook.creation_time.starts_with("2017-06-01T15:24:31"));
+    }
+
+    #[test]
+    fn test_message_class_importance_sensitivity() {
+        let outlook = Outlook::from_path("data/test_email.msg").unwrap();
+        assert_eq!(outlook.message_class, "IPM.Note");
+        assert_eq!(outlook.importance, 1); // Normal
+        assert_eq!(outlook.sensitivity, 0); // Normal
+
+        let outlook = Outlook::from_path("data/unicode.msg").unwrap();
+        assert_eq!(outlook.message_class, "IPM.Note");
+        assert_eq!(outlook.importance, 1);
+        // unicode.msg has no sensitivity property, defaults to 0
+        assert_eq!(outlook.sensitivity, 0);
+
+        let outlook = Outlook::from_path("data/ascii.msg").unwrap();
+        assert_eq!(outlook.message_class, "IPM.Note");
     }
 
     #[test]

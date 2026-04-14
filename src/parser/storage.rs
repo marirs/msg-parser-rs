@@ -247,6 +247,13 @@ impl Storages {
         self.root.get(key).map_or(String::new(), |x| x.into())
     }
 
+    pub fn get_root_int_prop(&self, key: &str) -> Option<u32> {
+        match self.root.get(key) {
+            Some(DataType::PtypInteger32(v)) => Some(*v),
+            _ => None,
+        }
+    }
+
     pub fn get_recipient_int_prop(&self, idx: usize, key: &str) -> Option<u32> {
         self.recipients.get(idx).and_then(|r| match r.get(key) {
             Some(DataType::PtypInteger32(v)) => Some(*v),
