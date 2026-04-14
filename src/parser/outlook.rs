@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path};
+use std::{fs::File, path::Path, sync::LazyLock};
 
 use regex::Regex;
 
@@ -14,6 +14,17 @@ use super::{
 type Name = String;
 type Email = String;
 
+static RE_CONTENT_TYPE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?im)^Content-Type: (.*(\n\s.*)*)\r\n").unwrap());
+static RE_DATE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)Date: (.*(\n\s.*)*)\r\n").unwrap());
+static RE_MESSAGE_ID: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?im)^Message-ID: (.*(\n\s.*)*)\r\n").unwrap());
+static RE_REPLY_TO: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?im)^Reply-To: (.*(\n\s.*)*)\r\n").unwrap());
+static RE_CC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?im)^CC: .*(\r\n\t)?.*\r\n").unwrap());
+
 // TransportHeaders contains transport specific message
 // envelope information for the email.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -25,34 +36,21 @@ pub struct TransportHeaders {
 }
 
 impl TransportHeaders {
-    fn extract_field(text: &str, re: Regex) -> String {
+    fn extract_field(text: &str, re: &Regex) -> String {
         if text.is_empty() {
-            return String::from("");
+            return String::new();
         }
-        let caps = re.captures(text);
-        if caps.is_none() {
-            return String::from("");
-        }
-        caps.and_then(|cap| cap.get(1).map(|x| String::from(x.as_str())))
-            .unwrap_or(String::from(""))
+        re.captures(text)
+            .and_then(|cap| cap.get(1).map(|x| String::from(x.as_str())))
+            .unwrap_or_default()
     }
 
     pub fn create_from_headers_text(text: &str) -> Self {
-        // Case-insensitive match
         Self {
-            content_type: Self::extract_field(
-                text,
-                Regex::new(r"(?im)^Content-Type: (.*(\n\s.*)*)\r\n").unwrap(),
-            ),
-            date: Self::extract_field(text, Regex::new(r"(?i)Date: (.*(\n\s.*)*)\r\n").unwrap()),
-            message_id: Self::extract_field(
-                text,
-                Regex::new(r"(?im)^Message-ID: (.*(\n\s.*)*)\r\n").unwrap(),
-            ),
-            reply_to: Self::extract_field(
-                text,
-                Regex::new(r"(?im)^Reply-To: (.*(\n\s.*)*)\r\n").unwrap(),
-            ),
+            content_type: Self::extract_field(text, &RE_CONTENT_TYPE),
+            date: Self::extract_field(text, &RE_DATE),
+            message_id: Self::extract_field(text, &RE_MESSAGE_ID),
+            reply_to: Self::extract_field(text, &RE_REPLY_TO),
         }
     }
 }
@@ -75,7 +73,7 @@ impl Person {
             .iter()
             .map(|&key| props.get(key).map_or(String::new(), |x| x.into()))
             .find(|x| !x.is_empty())
-            .unwrap_or(String::from(""));
+            .unwrap_or_default();
         Self { name, email }
     }
 }
@@ -124,8 +122,7 @@ impl Outlook {
     fn extract_cc_from_headers(header_text: &str) -> Vec<Person> {
         // Format in header is:
         // CC: NAME <EMAIL>, NAME <EMAIL> \r\n
-        let re = Regex::new(r"(?im)^CC: .*(\r\n\t)?.*\r\n").unwrap();
-        let caps = re.captures(header_text);
+        let caps = RE_CC.captures(header_text);
         if caps.is_none() {
             return vec![];
         }
@@ -143,7 +140,7 @@ impl Outlook {
             let name_email_pair: Vec<&str> = cc.split("<").map(|x| x.trim()).collect();
             let person = if name_email_pair.len() < 2 {
                 // In the unlikely event that there's no email provided.
-                Person::new(name_email_pair[0].to_string(), "".to_string())
+                Person::new(name_email_pair[0].to_string(), String::new())
             } else {
                 Person::new(
                     name_email_pair[0].replace('"', ""),
@@ -307,11 +304,8 @@ mod tests {
             }
         );
 
-        assert_eq!(outlook.body.starts_with("Test Email\r\n"), true);
-        assert_eq!(
-            outlook.rtf_compressed.starts_with("51210000c8a200004c5a4"),
-            true
-        );
+        assert!(outlook.body.starts_with("Test Email\r\n"));
+        assert!(outlook.rtf_compressed.starts_with("51210000c8a200004c5a4"));
     }
 
     #[test]
@@ -356,7 +350,7 @@ mod tests {
         );
         assert_eq!(outlook.subject, String::from("Test Email"));
 
-        assert_eq!(outlook.body.starts_with("Test Email"), true);
+        assert!(outlook.body.starts_with("Test Email"));
 
         assert_eq!(outlook.attachments.len(), 3);
         // Check displaynames
@@ -509,7 +503,7 @@ mod tests {
                 reply_to: String::from("")
             }
         );
-        assert_eq!(outlook.rtf_compressed.starts_with("bc020000b908"), true);
+        assert!(outlook.rtf_compressed.starts_with("bc020000b908"));
     }
 
     #[test]
@@ -550,6 +544,6 @@ mod tests {
         let path = "data/test_email.msg";
         let outlook = Outlook::from_path(path).unwrap();
         let json = outlook.to_json().unwrap();
-        assert_eq!(json.len() > 0, true);
+        assert!(!json.is_empty());
     }
 }

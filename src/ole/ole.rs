@@ -141,23 +141,21 @@ impl<'ole> Reader<'ole> {
 mod tests {
     use super::super::error::Error;
     use super::Reader;
-    use std;
-    use std::error::Error as e;
 
     #[test]
     fn instance_nok() {
         let path = "Thumbs.db";
         let o: Result<Reader, Error> = Reader::from_path(path);
-        assert_eq!(o.is_ok(), false);
+        assert!(o.is_err());
         let e = o.err().unwrap();
-        println!("NOK: {}", e.to_string());
+        println!("NOK: {}", e);
     }
 
     #[test]
     fn instance_ok() {
         let path = "data/Thumbs.db";
         let o: Result<Reader, Error> = Reader::from_path(path);
-        assert_eq!(o.is_ok(), true);
+        assert!(o.is_ok());
     }
 
     #[test]
@@ -173,7 +171,7 @@ mod tests {
         vec[0] = 0xD1;
         fill(&mut vec);
         let ole = Reader::new(&vec[..]);
-        assert_eq!(ole.is_ok(), false);
+        assert!(ole.is_err());
         println!("BAD IDENTIFIER: {}", ole.err().unwrap());
     }
 
@@ -190,16 +188,16 @@ mod tests {
         vec.push(0xFE);
         fill(&mut vec);
         let ole = Reader::new(&vec[..]);
-        assert_eq!(ole.is_ok(), false);
+        assert!(ole.is_err());
         println!("BAD ENDIANNESS: {}", ole.err().unwrap());
     }
 
     #[test]
     fn uid() {
         let ole = Reader::from_path("data/Thumbs.db");
-        assert_eq!(ole.is_ok(), true);
+        assert!(ole.is_ok());
         let ole = ole.unwrap();
-        assert_eq!(&[0x0u8; 16] == &ole.uid[..], true);
+        assert_eq!(&[0x0u8; 16], &ole.uid[..]);
     }
 
     #[test]
@@ -212,7 +210,7 @@ mod tests {
         vec.extend(vec![0xFF, 0xFF, 0xFF, 0xFF]);
         fill(&mut vec);
         let ole = Reader::new(&vec[..]);
-        assert_eq!(ole.is_ok(), false);
+        assert!(ole.is_err());
     }
 
     #[test]

@@ -1,5 +1,4 @@
 use crate::ole::util::FromSlice;
-use std;
 
 #[derive(Debug)]
 pub(crate) enum NodeColour {
@@ -398,7 +397,7 @@ impl<'ole> super::ole::Reader<'ole> {
 
     fn get_short_stream_slices(
         &self,
-        chain: &std::vec::Vec<u32>,
+        chain: &[u32],
         size: usize,
     ) -> Result<EntrySlice<'_>, super::error::Error> {
         let ssector_size = *self.short_sec_size.as_ref().unwrap();
@@ -420,7 +419,7 @@ impl<'ole> super::ole::Reader<'ole> {
 
     fn get_stream_slices(
         &self,
-        chain: &std::vec::Vec<u32>,
+        chain: &[u32],
         size: usize,
     ) -> Result<EntrySlice<'_>, super::error::Error> {
         let sector_size = *self.sec_size.as_ref().unwrap();

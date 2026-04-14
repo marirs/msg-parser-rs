@@ -72,7 +72,7 @@ fn decode_ptypstring(buff: &[u8]) -> Result<DataType, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_ptypstring, DataType, PtypDecoder};
+    use super::{DataType, PtypDecoder, decode_ptypstring};
     use crate::ole::Reader;
 
     #[test]
@@ -84,7 +84,7 @@ mod tests {
 
         let mut slice = parser.get_entry_slice(entry).unwrap();
         let res = PtypDecoder::decode(&mut slice, "1234");
-        assert_eq!(res.is_err(), true);
+        assert!(res.is_err());
         let err = res.unwrap_err();
         assert_eq!(
             err.to_string(),

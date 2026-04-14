@@ -177,7 +177,7 @@ impl Storages {
     pub fn get_val_from_attachment_or_default(&self, idx: usize, key: &str) -> String {
         self.attachments
             .get(idx)
-            .map(|attach| attach.get(key).map_or(String::from(""), |x| x.into()))
+            .map(|attach| attach.get(key).map_or(String::new(), |x| x.into()))
             .unwrap_or_default()
     }
 }

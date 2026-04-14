@@ -42,12 +42,8 @@ impl Stream {
         }
         // Split name up into property id and datatype
         let (prop_id, prop_datatype) = Self::extract_id_and_datatype(name);
-        let key = prop_map.get_canonical_name(&prop_id)?;
-        let value_res = PtypDecoder::decode(entry_slice, &prop_datatype);
-        if value_res.is_err() {
-            return None;
-        }
-        let value = value_res.unwrap();
+        let key = prop_map.get_canonical_name(&prop_id)?.to_string();
+        let value = PtypDecoder::decode(entry_slice, &prop_datatype).ok()?;
         Some(Self {
             parent: parent.clone(),
             key,
@@ -77,8 +73,8 @@ mod tests {
 
     #[test]
     fn test_is_stream() {
-        assert_eq!(Stream::is_stream("__recip_version1.0_#00000000"), false);
-        assert_eq!(Stream::is_stream("__substg1.0_3701000D"), true);
+        assert!(!Stream::is_stream("__recip_version1.0_#00000000"));
+        assert!(Stream::is_stream("__substg1.0_3701000D"));
     }
 
     #[test]
@@ -90,7 +86,7 @@ mod tests {
         let mut slice = parser
             .iterate()
             .filter(|x| x.name() == "__substg1.0_0C1F001F")
-            .nth(0)
+            .next()
             .and_then(|entry| parser.get_entry_slice(entry).ok())
             .unwrap();
 
@@ -113,7 +109,7 @@ mod tests {
         let mut slice = parser
             .iterate()
             .filter(|x| x.name() == "__substg1.0_3001001F")
-            .nth(0)
+            .next()
             .and_then(|entry| parser.get_entry_slice(entry).ok())
             .unwrap();
         let stream = Stream::create(

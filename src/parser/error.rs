@@ -9,33 +9,12 @@ use crate::ole::Error as OleError;
 // DataTypeError is used when decode fails in datatype.rs
 #[derive(ThisError, Debug)]
 pub enum DataTypeError {
+    #[error("DataTypeError: Unknown value encoding: 0x{0}")]
     UnknownCode(String),
+    #[error("DataTypeError: Unable to decode bytes into UTF-8 string {0}")]
     Utf8Err(#[from] std::string::FromUtf8Error),
+    #[error("DataTypeError: Unable to decode bytes into UTF-16 string {0}")]
     Utf16Err(#[from] std::string::FromUtf16Error),
-}
-
-impl std::fmt::Display for DataTypeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match *self {
-            DataTypeError::UnknownCode(ref value) => {
-                write!(f, "DataTypeError: Unknown value encoding: 0x{}", value)
-            }
-            DataTypeError::Utf8Err(ref err) => {
-                write!(
-                    f,
-                    "DataTypeError: Unable to decode bytes into UTF-8 string {}",
-                    err
-                )
-            }
-            DataTypeError::Utf16Err(ref err) => {
-                write!(
-                    f,
-                    "DataTypeError: Unable to decode bytes into UTF-16 string {}",
-                    err
-                )
-            }
-        }
-    }
 }
 
 #[derive(ThisError, Debug)]

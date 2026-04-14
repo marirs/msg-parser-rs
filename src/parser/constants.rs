@@ -4,12 +4,12 @@ use std::collections::HashMap;
 // Full list is available in [MS-OXPROPS].
 #[derive(Debug)]
 pub struct PropIdNameMap {
-    map: HashMap<String, String>,
+    map: HashMap<&'static str, &'static str>,
 }
 
 impl PropIdNameMap {
     pub fn init() -> Self {
-        let map: HashMap<String, String> = vec![
+        let map: HashMap<&'static str, &'static str> = vec![
             ("0x0001", "TemplateData"),
             ("0x0002", "AlternateRecipientAllowed"),
             ("0x0004", "ScriptData"),
@@ -561,13 +561,12 @@ impl PropIdNameMap {
             ("0xFFFD", "AddressBookContainerId"),
         ]
         .into_iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
 
         Self { map }
     }
 
-    pub fn get_canonical_name(&self, id: &str) -> Option<String> {
-        self.map.get(id).map(|v| v.to_string())
+    pub fn get_canonical_name(&self, id: &str) -> Option<&'static str> {
+        self.map.get(id).copied()
     }
 }
