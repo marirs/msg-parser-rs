@@ -43,13 +43,27 @@ use msg_parser::Outlook;
 // From a file path
 let outlook = Outlook::from_path("email.msg").unwrap();
 
-// From a byte slice
+// From a byte slice (accepts &[u8], Vec<u8>, or anything AsRef<[u8]>)
 let bytes = std::fs::read("email.msg").unwrap();
 let outlook = Outlook::from_slice(&bytes).unwrap();
+
+// Passing a Vec<u8> directly also works
+let outlook = Outlook::from_slice(bytes).unwrap();
 
 // From any std::io::Read source (file, stdin, network, etc.)
 let file = std::fs::File::open("email.msg").unwrap();
 let outlook = Outlook::from_reader(file).unwrap();
+```
+
+### Display formatting
+
+`Outlook`, `Person`, and `Attachment` all implement `Display` for
+human-readable output:
+
+```rust
+let outlook = Outlook::from_path("email.msg").unwrap();
+// Prints a summary: From, Subject, To, CC, BCC, Date, Attachments
+println!("{}", outlook);
 ```
 
 ### Saving attachments
@@ -67,19 +81,74 @@ for attach in &outlook.attachments {
 }
 ```
 
-### Detecting embedded messages
+### Detecting and parsing embedded messages
 
 Attachments with `attach_method == 5` are nested `.msg` files (embedded
-messages). You can identify them and handle them separately:
+messages). Use `as_message()` to parse them recursively:
 
 ```rust
+let outlook = Outlook::from_path("email.msg").unwrap();
+
 for attach in &outlook.attachments {
-    match attach.attach_method {
-        1 => println!("{}: regular file", attach.long_file_name),
-        5 => println!("{}: embedded .msg", attach.display_name),
-        6 => println!("{}: OLE object", attach.display_name),
-        _ => println!("{}: other ({})", attach.display_name, attach.attach_method),
+    if let Some(Ok(nested)) = attach.as_message() {
+        println!("Embedded message subject: {}", nested.subject);
+        println!("Embedded from: {}", nested.sender);
+        // You can access all fields on the nested message, including
+        // its own attachments (which may also be embedded .msg files)
     }
+}
+
+// Or use the convenience method:
+for attach in &outlook.attachments {
+    if attach.is_embedded_message() {
+        println!("{} is an embedded .msg", attach.display_name);
+    }
+}
+```
+
+### Inline images (Content-ID)
+
+HTML bodies reference inline images via `cid:` URIs. Use `content_id` to
+resolve them:
+
+```rust
+let outlook = Outlook::from_path("email.msg").unwrap();
+let mut html = outlook.html.clone();
+
+for attach in &outlook.attachments {
+    if !attach.content_id.is_empty() {
+        // Replace cid: references with actual data
+        let cid_ref = format!("cid:{}", attach.content_id);
+        let data_uri = format!(
+            "data:{};base64,{}",
+            attach.mime_tag,
+            base64_encode(&attach.payload_bytes), // your base64 encoder
+        );
+        html = html.replace(&cid_ref, &data_uri);
+    }
+}
+```
+
+### RTF decompression and HTML extraction
+
+Many `.msg` files store the body as compressed RTF rather than HTML.
+Use `rtf_decompressed()` to get the raw RTF, or `html_from_rtf()` to
+extract embedded HTML:
+
+```rust
+let outlook = Outlook::from_path("email.msg").unwrap();
+
+// Get the best available HTML body
+let html = if !outlook.html.is_empty() {
+    outlook.html.clone()
+} else {
+    // Many messages embed HTML inside compressed RTF
+    outlook.html_from_rtf().unwrap_or_default()
+};
+
+// Or work with the raw decompressed RTF directly
+if let Some(rtf_bytes) = outlook.rtf_decompressed() {
+    std::fs::write("body.rtf", &rtf_bytes).unwrap();
 }
 ```
 
@@ -129,6 +198,33 @@ println!("{}", json);
 | `creation_time` | `String` | ISO 8601 UTC timestamp |
 | `last_modification_time` | `String` | ISO 8601 UTC timestamp |
 | `attachments` | `Vec<Attachment>` | File attachments with metadata and raw bytes |
+
+### Attachment fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `display_name` | `String` | Display name shown in the mail client |
+| `payload` | `String` | Hex-encoded attachment content |
+| `payload_bytes` | `Vec<u8>` | Raw attachment bytes |
+| `extension` | `String` | File extension (e.g. `".pdf"`) |
+| `mime_tag` | `String` | MIME type (e.g. `"image/png"`) |
+| `file_name` | `String` | Short 8.3 filename |
+| `long_file_name` | `String` | Full original filename |
+| `attach_method` | `u32` | `1`=file, `5`=embedded .msg, `6`=OLE object |
+| `content_id` | `String` | Content-ID for inline images |
+
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `Outlook::from_path(path)` | `Result<Outlook, Error>` | Parse from filesystem path |
+| `Outlook::from_slice(bytes)` | `Result<Outlook, Error>` | Parse from byte slice or `Vec<u8>` |
+| `Outlook::from_reader(reader)` | `Result<Outlook, Error>` | Parse from any `Read` source |
+| `Outlook::to_json()` | `Result<String, Error>` | Serialize to JSON |
+| `Outlook::rtf_decompressed()` | `Option<Vec<u8>>` | Decompress RTF body |
+| `Outlook::html_from_rtf()` | `Option<String>` | Extract HTML from compressed RTF |
+| `Attachment::as_message()` | `Option<Result<Outlook, Error>>` | Parse embedded `.msg` attachment |
+| `Attachment::is_embedded_message()` | `bool` | Check if attachment is embedded `.msg` |
 
 ### Requirements
 

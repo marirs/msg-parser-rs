@@ -1,5 +1,6 @@
 mod constants;
 mod decode;
+mod rtf;
 mod storage;
 mod stream;
 

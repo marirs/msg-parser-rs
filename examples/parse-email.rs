@@ -6,61 +6,67 @@ fn main() {
         .unwrap_or("data/test_email.msg".into());
     let outlook = Outlook::from_path(&path).unwrap();
 
-    // Sender & subject
-    println!(
-        "From:    {} <{}>",
-        outlook.sender.name, outlook.sender.email
-    );
-    println!("Subject: {}", outlook.subject);
-    println!("Class:   {}", outlook.message_class);
+    // Display summary (uses the Display impl)
+    println!("{}", outlook);
 
-    // Recipients
-    for p in &outlook.to {
-        println!("To:      {} <{}>", p.name, p.email);
-    }
-    for p in &outlook.cc {
-        println!("CC:      {} <{}>", p.name, p.email);
-    }
-    for p in &outlook.bcc {
-        println!("BCC:     {} <{}>", p.name, p.email);
-    }
+    // Message class and metadata
+    println!("Class:       {}", outlook.message_class);
+    println!("Importance:  {}", outlook.importance);
+    println!("Sensitivity: {}", outlook.sensitivity);
 
     // Dates
     if !outlook.message_delivery_time.is_empty() {
-        println!("Delivered: {}", outlook.message_delivery_time);
+        println!("Delivered:   {}", outlook.message_delivery_time);
     }
     if !outlook.client_submit_time.is_empty() {
-        println!("Submitted: {}", outlook.client_submit_time);
+        println!("Submitted:   {}", outlook.client_submit_time);
     }
 
     // Body preview
     let preview: String = outlook.body.chars().take(100).collect();
-    println!("Body:    {}...", preview.replace("\r\n", " "));
+    println!("Body:        {}...", preview.replace("\r\n", " "));
 
-    // Attachments
-    println!("Attachments: {}", outlook.attachments.len());
-    for attach in &outlook.attachments {
-        let name = if attach.long_file_name.is_empty() {
-            &attach.file_name
-        } else {
-            &attach.long_file_name
-        };
-        let method = match attach.attach_method {
-            1 => "file",
-            5 => "embedded .msg",
-            6 => "OLE object",
-            _ => "unknown",
-        };
-        println!(
-            "  - {} ({}, {} bytes, {})",
-            name,
-            attach.extension,
-            attach.payload_bytes.len(),
-            method,
-        );
+    // HTML body (direct or extracted from RTF)
+    let html = if !outlook.html.is_empty() {
+        Some(outlook.html.clone())
+    } else {
+        outlook.html_from_rtf()
+    };
+    if let Some(ref h) = html {
+        let preview: String = h.chars().take(80).collect();
+        println!("HTML:        {}...", preview);
     }
 
-    // JSON output
-    println!("\n--- JSON ---");
-    println!("{}", outlook.to_json().unwrap());
+    // RTF decompression
+    if let Some(rtf) = outlook.rtf_decompressed() {
+        println!("RTF:         {} bytes decompressed", rtf.len());
+    }
+
+    // Attachments
+    println!("\nAttachments: {}", outlook.attachments.len());
+    for attach in &outlook.attachments {
+        // Display impl shows: name (method, size)
+        println!("  - {}", attach);
+
+        // Show content-id for inline images
+        if !attach.content_id.is_empty() {
+            println!("    Content-ID: {}", attach.content_id);
+        }
+
+        // Recursively parse embedded .msg attachments
+        if let Some(result) = attach.as_message() {
+            match result {
+                Ok(nested) => {
+                    println!("    Embedded message:");
+                    println!("      Subject: {}", nested.subject);
+                    println!("      From:    {}", nested.sender);
+                    println!(
+                        "      To:      {:?}",
+                        nested.to.iter().map(|p| p.to_string()).collect::<Vec<_>>()
+                    );
+                }
+                Err(e) => println!("    Failed to parse embedded message: {}", e),
+            }
+        }
+    }
 }

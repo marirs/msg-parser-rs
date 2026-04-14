@@ -82,13 +82,60 @@ impl Person {
     }
     fn create_from_props(props: &Properties, name_key: &str, email_keys: &[&str]) -> Self {
         let name: String = props.get(name_key).map_or(String::new(), |x| x.into());
-        // Get the fist email that can be found in props given email_keys.
+        // Get the first email that can be found in props given email_keys.
         let email = email_keys
             .iter()
             .map(|&key| props.get(key).map_or(String::new(), |x| x.into()))
             .find(|x| !x.is_empty())
             .unwrap_or_default();
         Self { name, email }
+    }
+
+    /// Returns `true` if the email address looks like an Exchange X.500 DN
+    /// rather than a proper SMTP address.
+    fn is_x500_dn(email: &str) -> bool {
+        let upper = email.to_ascii_uppercase();
+        upper.starts_with("/O=") || upper.starts_with("/CN=")
+    }
+
+    /// Try to resolve X.500 DN addresses to SMTP by searching the raw
+    /// transport headers for the display name.
+    fn resolve_email(&mut self, raw_headers: &str) {
+        if self.email.is_empty() || !Self::is_x500_dn(&self.email) {
+            return;
+        }
+        // Try to find this person's SMTP address in the transport headers.
+        // Headers often contain: "Display Name" <user@example.com>
+        // Look for the display name (or the /CN= tail) followed by an SMTP address.
+        if let Some(smtp) = Self::find_smtp_in_headers(raw_headers, &self.name) {
+            self.email = smtp;
+        }
+    }
+
+    /// Search raw transport headers for an SMTP address associated with a display name.
+    fn find_smtp_in_headers(headers: &str, display_name: &str) -> Option<String> {
+        if display_name.is_empty() || headers.is_empty() {
+            return None;
+        }
+        // Look for patterns like: "Display Name" <user@domain.com>
+        // or: Display Name <user@domain.com>
+        let name_lower = display_name.to_lowercase();
+        for line in headers.lines() {
+            let line_lower = line.to_lowercase();
+            if !line_lower.contains(&name_lower) {
+                continue;
+            }
+            // Extract email from angle brackets
+            if let Some(start) = line.rfind('<')
+                && let Some(end) = line[start..].find('>')
+            {
+                let candidate = &line[start + 1..start + end];
+                if candidate.contains('@') {
+                    return Some(candidate.to_string());
+                }
+            }
+        }
+        None
     }
 }
 
@@ -130,6 +177,9 @@ pub struct Attachment {
     /// - `5` — embedded message (nested `.msg`)
     /// - `6` — OLE object
     pub attach_method: u32,
+    /// Content-ID for inline attachments (e.g. `"image001@01D00000.00000000"`).
+    /// Used to resolve `cid:` references in HTML bodies. Empty if not set.
+    pub content_id: String,
 }
 
 impl Attachment {
@@ -147,7 +197,39 @@ impl Attachment {
             attach_method: storages
                 .get_attachment_int_prop(idx, "AttachMethod")
                 .unwrap_or(0),
+            content_id: storages.get_val_from_attachment_or_default(idx, "AttachContentId"),
         }
+    }
+
+    /// Returns `true` if this attachment is an embedded `.msg` message
+    /// (`attach_method == 5`).
+    pub fn is_embedded_message(&self) -> bool {
+        self.attach_method == 5
+    }
+
+    /// Parse the embedded `.msg` attachment and return the nested message.
+    ///
+    /// Returns `Some(Ok(outlook))` if this is an embedded message (`attach_method == 5`)
+    /// with parseable content, `Some(Err(_))` if it is an embedded message but parsing
+    /// fails, or `None` if it is not an embedded message.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use msg_parser::Outlook;
+    ///
+    /// let outlook = Outlook::from_path("email.msg").unwrap();
+    /// for attach in &outlook.attachments {
+    ///     if let Some(Ok(nested)) = attach.as_message() {
+    ///         println!("Embedded: {}", nested.subject);
+    ///     }
+    /// }
+    /// ```
+    pub fn as_message(&self) -> Option<Result<Outlook, Error>> {
+        if !self.is_embedded_message() || self.payload_bytes.is_empty() {
+            return None;
+        }
+        Some(Outlook::from_slice(&self.payload_bytes))
     }
 }
 
@@ -224,11 +306,13 @@ impl Outlook {
         let mut bcc = Vec::new();
 
         for (i, recip_map) in storages.recipients.iter().enumerate() {
-            let person = Person::create_from_props(
+            let mut person = Person::create_from_props(
                 recip_map,
                 "DisplayName",
                 &["SmtpAddress", "EmailAddress"],
             );
+            // Resolve X.500 DN addresses to SMTP via transport headers
+            person.resolve_email(&headers_text);
             // RecipientType: 1=To, 2=CC, 3=BCC (MS-OXMSG 2.2.1)
             match storages.get_recipient_int_prop(i, "RecipientType") {
                 Some(2) => cc.push(person),
@@ -237,13 +321,16 @@ impl Outlook {
             }
         }
 
+        let mut sender = Person::create_from_props(
+            &storages.root,
+            "SenderName",
+            &["SenderSmtpAddress", "SenderEmailAddress"],
+        );
+        sender.resolve_email(&headers_text);
+
         Self {
             headers,
-            sender: Person::create_from_props(
-                &storages.root,
-                "SenderName",
-                &["SenderSmtpAddress", "SenderEmailAddress"],
-            ),
+            sender,
             to,
             cc,
             bcc,
@@ -318,6 +405,9 @@ impl Outlook {
 
     /// Parse a `.msg` file from a byte slice already in memory.
     ///
+    /// Accepts any type that implements `AsRef<[u8]>`, including `&[u8]`,
+    /// `Vec<u8>`, and `bytes::Bytes`.
+    ///
     /// # Example
     ///
     /// ```no_run
@@ -326,8 +416,8 @@ impl Outlook {
     /// let bytes = std::fs::read("email.msg").unwrap();
     /// let outlook = Outlook::from_slice(&bytes).unwrap();
     /// ```
-    pub fn from_slice(slice: &[u8]) -> Result<Self, Error> {
-        let parser = ole::Reader::new(slice)?;
+    pub fn from_slice(slice: impl AsRef<[u8]>) -> Result<Self, Error> {
+        let parser = ole::Reader::new(slice.as_ref())?;
         let mut storages = Storages::new(&parser);
         storages.process_streams(&parser);
 
@@ -348,6 +438,126 @@ impl Outlook {
     /// ```
     pub fn to_json(&self) -> Result<String, Error> {
         Ok(serde_json::to_string(self)?)
+    }
+
+    /// Decompress the RTF body and return it as a byte vector.
+    ///
+    /// The `rtf_compressed` field contains the raw compressed data as a
+    /// hex-encoded string. This method decodes and decompresses it per
+    /// [MS-OXRTFCP](https://docs.microsoft.com/en-us/openspecs/exchange_server_protocols/ms-oxrtfcp).
+    ///
+    /// Returns `None` if the message has no RTF body or decompression fails.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use msg_parser::Outlook;
+    ///
+    /// let outlook = Outlook::from_path("email.msg").unwrap();
+    /// if let Some(rtf) = outlook.rtf_decompressed() {
+    ///     println!("RTF body: {} bytes", rtf.len());
+    /// }
+    /// ```
+    pub fn rtf_decompressed(&self) -> Option<Vec<u8>> {
+        if self.rtf_compressed.is_empty() {
+            return None;
+        }
+        let raw = hex::decode(&self.rtf_compressed).ok()?;
+        super::rtf::decompress_rtf(&raw)
+    }
+
+    /// Extract HTML from the RTF body when the message has no direct HTML property.
+    ///
+    /// Many Outlook messages embed the HTML body inside compressed RTF using
+    /// the `\fromhtml1` control word. This method decompresses the RTF and
+    /// extracts the embedded HTML.
+    ///
+    /// Returns `None` if the RTF body doesn't contain embedded HTML.
+    /// Prefer the `html` field when it is non-empty — this method is a fallback.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use msg_parser::Outlook;
+    ///
+    /// let outlook = Outlook::from_path("email.msg").unwrap();
+    /// let html = if !outlook.html.is_empty() {
+    ///     outlook.html.clone()
+    /// } else {
+    ///     outlook.html_from_rtf().unwrap_or_default()
+    /// };
+    /// ```
+    pub fn html_from_rtf(&self) -> Option<String> {
+        let rtf = self.rtf_decompressed()?;
+        super::rtf::extract_html_from_rtf(&rtf)
+    }
+}
+
+impl std::fmt::Display for Person {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.name.is_empty() {
+            write!(f, "{}", self.email)
+        } else if self.email.is_empty() || self.name == self.email {
+            write!(f, "{}", self.name)
+        } else {
+            write!(f, "{} <{}>", self.name, self.email)
+        }
+    }
+}
+
+impl std::fmt::Display for Attachment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = if self.long_file_name.is_empty() {
+            if self.file_name.is_empty() {
+                &self.display_name
+            } else {
+                &self.file_name
+            }
+        } else {
+            &self.long_file_name
+        };
+        let method = match self.attach_method {
+            1 => "file",
+            5 => "embedded .msg",
+            6 => "OLE object",
+            _ => "unknown",
+        };
+        write!(
+            f,
+            "{} ({}, {} bytes)",
+            name,
+            method,
+            self.payload_bytes.len()
+        )
+    }
+}
+
+impl std::fmt::Display for Outlook {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "From:    {}", self.sender)?;
+        writeln!(f, "Subject: {}", self.subject)?;
+        if !self.to.is_empty() {
+            let to: Vec<String> = self.to.iter().map(|p| p.to_string()).collect();
+            writeln!(f, "To:      {}", to.join(", "))?;
+        }
+        if !self.cc.is_empty() {
+            let cc: Vec<String> = self.cc.iter().map(|p| p.to_string()).collect();
+            writeln!(f, "CC:      {}", cc.join(", "))?;
+        }
+        if !self.bcc.is_empty() {
+            let bcc: Vec<String> = self.bcc.iter().map(|p| p.to_string()).collect();
+            writeln!(f, "BCC:     {}", bcc.join(", "))?;
+        }
+        if !self.message_delivery_time.is_empty() {
+            writeln!(f, "Date:    {}", self.message_delivery_time)?;
+        }
+        if !self.attachments.is_empty() {
+            writeln!(f, "Attachments ({}):", self.attachments.len())?;
+            for a in &self.attachments {
+                writeln!(f, "  - {}", a)?;
+            }
+        }
+        Ok(())
     }
 }
 

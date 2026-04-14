@@ -453,7 +453,8 @@ impl<'ole> super::ole::Reader<'ole> {
 
             let node_type = self.entries.as_ref().unwrap()[current_id as usize]._type();
             let left_child = self.entries.as_ref().unwrap()[current_id as usize].left_child_node();
-            let right_child = self.entries.as_ref().unwrap()[current_id as usize].right_child_node();
+            let right_child =
+                self.entries.as_ref().unwrap()[current_id as usize].right_child_node();
 
             // Push right first so left is processed first (stack is LIFO)
             if right_child < n {

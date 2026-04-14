@@ -14,16 +14,16 @@
 //!
 //! let outlook = Outlook::from_path("email.msg").unwrap();
 //!
-//! println!("From: {} <{}>", outlook.sender.name, outlook.sender.email);
+//! // Use Display impl for a human-readable summary
+//! println!("{}", outlook);
+//!
+//! // Or access fields directly
+//! println!("From: {}", outlook.sender);
 //! println!("Subject: {}", outlook.subject);
 //! println!("Date: {}", outlook.message_delivery_time);
 //!
-//! for person in &outlook.to {
-//!     println!("To: {} <{}>", person.name, person.email);
-//! }
-//!
 //! for attach in &outlook.attachments {
-//!     println!("Attachment: {} ({} bytes)", attach.long_file_name, attach.payload_bytes.len());
+//!     println!("Attachment: {}", attach);
 //! }
 //! ```
 //!
@@ -35,13 +35,35 @@
 //! // From a file path
 //! let outlook = Outlook::from_path("email.msg").unwrap();
 //!
-//! // From a byte slice
+//! // From a byte slice (accepts &[u8], Vec<u8>, or anything AsRef<[u8]>)
 //! let bytes = std::fs::read("email.msg").unwrap();
 //! let outlook = Outlook::from_slice(&bytes).unwrap();
 //!
 //! // From any reader (file, stdin, network stream, etc.)
 //! let file = std::fs::File::open("email.msg").unwrap();
 //! let outlook = Outlook::from_reader(file).unwrap();
+//! ```
+//!
+//! # Embedded messages
+//!
+//! ```no_run
+//! # let outlook = msg_parser::Outlook::from_path("email.msg").unwrap();
+//! for attach in &outlook.attachments {
+//!     if let Some(Ok(nested)) = attach.as_message() {
+//!         println!("Embedded: {} from {}", nested.subject, nested.sender);
+//!     }
+//! }
+//! ```
+//!
+//! # HTML from RTF fallback
+//!
+//! ```no_run
+//! # let outlook = msg_parser::Outlook::from_path("email.msg").unwrap();
+//! let html = if !outlook.html.is_empty() {
+//!     outlook.html.clone()
+//! } else {
+//!     outlook.html_from_rtf().unwrap_or_default()
+//! };
 //! ```
 
 // OLE Reader
