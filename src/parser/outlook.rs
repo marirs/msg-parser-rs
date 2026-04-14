@@ -66,7 +66,7 @@ impl Person {
     fn new(name: Name, email: Email) -> Self {
         Self { name, email }
     }
-    fn create_from_props(props: &Properties, name_key: &str, email_keys: Vec<&str>) -> Self {
+    fn create_from_props(props: &Properties, name_key: &str, email_keys: &[&str]) -> Self {
         let name: String = props.get(name_key).map_or(String::new(), |x| x.into());
         // Get the fist email that can be found in props given email_keys.
         let email = email_keys
@@ -162,7 +162,7 @@ impl Outlook {
             sender: Person::create_from_props(
                 &storages.root,
                 "SenderName",
-                vec!["SenderSmtpAddress", "SenderEmailAddress"],
+                &["SenderSmtpAddress", "SenderEmailAddress"],
             ),
             to: storages
                 .recipients
@@ -171,7 +171,7 @@ impl Outlook {
                     Person::create_from_props(
                         recip_map,
                         "DisplayName",
-                        vec!["SmtpAddress", "EmailAddress"],
+                        &["SmtpAddress", "EmailAddress"],
                     )
                 })
                 .collect(),

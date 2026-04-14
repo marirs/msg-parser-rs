@@ -100,7 +100,7 @@ pub type Attachments = Vec<Properties>;
 #[derive(Debug)]
 pub struct Storages {
     storage_map: EntryStorageMap,
-    prop_map: PropIdNameMap,
+    prop_map: &'static PropIdNameMap,
     pub attachments: Attachments,
     pub recipients: Recipients,
     // Mail properties
@@ -118,7 +118,7 @@ impl Storages {
     fn create_stream(&self, parser: &Reader, entry: &Entry) -> Option<Stream> {
         let parent = self.storage_map.get_storage_type(entry.parent_node())?;
         let mut slice = parser.get_entry_slice(entry).ok()?;
-        Stream::create(entry.name(), &mut slice, &self.prop_map, parent)
+        Stream::create(entry.name(), &mut slice, self.prop_map, parent)
     }
 
     pub fn process_streams(&mut self, parser: &Reader) {

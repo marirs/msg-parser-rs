@@ -304,32 +304,26 @@ impl<'s> EntrySlice<'s> {
 impl<'s> std::io::Read for EntrySlice<'s> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let to_read = std::cmp::min(buf.len(), self.total_size - self.read);
-        let result: Result<usize, std::io::Error>;
         if to_read == 0 {
-            result = Ok(0usize);
-        } else {
-            let mut offset = self.read;
-            let mut read = 0;
-            while read != to_read {
-                let chunk_index = offset / self.max_chunk_size;
-                if chunk_index >= self.chunks.len() {
-                    break;
-                }
-                let chunk = &self.chunks[chunk_index];
-                let local_offset = offset % self.max_chunk_size;
-                let end = std::cmp::min(local_offset + to_read - read, self.max_chunk_size);
-                let slice = &chunk[local_offset..end];
-                for u in slice {
-                    buf[read] = *u;
-                    read += 1;
-                    self.read += 1;
-                }
-                offset = self.read;
-            }
-            result = Ok(read);
+            return Ok(0);
         }
-
-        result
+        let mut offset = self.read;
+        let mut read = 0;
+        while read != to_read {
+            let chunk_index = offset / self.max_chunk_size;
+            if chunk_index >= self.chunks.len() {
+                break;
+            }
+            let chunk = &self.chunks[chunk_index];
+            let local_offset = offset % self.max_chunk_size;
+            let end = std::cmp::min(local_offset + to_read - read, self.max_chunk_size);
+            let n = end - local_offset;
+            buf[read..read + n].copy_from_slice(&chunk[local_offset..end]);
+            read += n;
+            self.read += n;
+            offset = self.read;
+        }
+        Ok(read)
     }
 }
 
@@ -402,7 +396,7 @@ impl<'ole> super::ole::Reader<'ole> {
     ) -> Result<EntrySlice<'_>, super::error::Error> {
         let ssector_size = *self.short_sec_size.as_ref().unwrap();
         let mut entry_slice = EntrySlice::new(ssector_size, size);
-        let short_stream_chain = &self.entries.as_ref().unwrap()[0].sec_id_chain.clone();
+        let short_stream_chain = &self.entries.as_ref().unwrap()[0].sec_id_chain;
         let n_per_sector = *self.sec_size.as_ref().unwrap() / ssector_size;
         let mut total_read = 0;
         for ssector_id in chain {

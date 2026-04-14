@@ -1,60 +1,46 @@
+use thiserror::Error as ThisError;
+
 /// Errors related to the process of parsing.
-#[derive(Debug)]
+#[derive(ThisError, Debug)]
 #[allow(clippy::enum_variant_names)]
 pub enum Error {
     /// This happens when filesize is null, or to big to fit into an usize.
+    #[error("Filesize is null or too big.")]
     BadFileSize,
 
     /// Classic std::io::Error.
-    IOError(std::io::Error),
+    #[error(transparent)]
+    IOError(#[from] std::io::Error),
 
     /// Something is not implemented yet ?
+    #[error("Method not implemented yet")]
     NotImplementedYet,
 
     /// This is not a valid OLE file.
+    #[error("Invalid OLE File")]
     InvalidOLEFile,
 
     /// Something has a bad size.
+    #[error("{0}")]
     BadSizeValue(&'static str),
 
     /// MSAT is empty.
+    #[error("MSAT is empty")]
     EmptyMasterSectorAllocationTable,
 
     /// Malformed SAT.
+    #[error("Sector is not a sector used by the SAT.")]
     NotSectorUsedBySAT,
 
     /// Unknown node type.
+    #[error("Unknown node type")]
     NodeTypeUnknown,
 
     /// Root storage has a bad size.
+    #[error("Bad RootStorage size")]
     BadRootStorageSize,
 
     /// User query an empty entry
+    #[error("Empty entry")]
     EmptyEntry,
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            Error::BadFileSize => write!(f, "Filesize is null or too big."),
-            Error::IOError(ref e) => write!(f, "{}", e),
-            Error::NotImplementedYet => write!(f, "Method not implemented yet"),
-            Error::InvalidOLEFile => write!(f, "Invalid OLE File"),
-            Error::BadSizeValue(ref e) => write!(f, "{}", e),
-            Error::EmptyMasterSectorAllocationTable => write!(f, "MSAT is empty"),
-            Error::NotSectorUsedBySAT => write!(f, "Sector is not a sector used by the SAT."),
-            Error::NodeTypeUnknown => write!(f, "Unknown node type"),
-            Error::BadRootStorageSize => write!(f, "Bad RootStorage size"),
-            Error::EmptyEntry => write!(f, "Empty entry"),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match *self {
-            Error::IOError(ref e) => Some(e),
-            _ => None,
-        }
-    }
 }
