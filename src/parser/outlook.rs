@@ -193,6 +193,12 @@ impl Outlook {
         Ok(outlook)
     }
 
+    pub fn from_reader<R: std::io::Read>(mut reader: R) -> Result<Self, Error> {
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf)?;
+        Self::from_slice(&buf)
+    }
+
     pub fn from_slice(slice: &[u8]) -> Result<Self, Error> {
         let parser = ole::Reader::new(slice)?;
         let mut storages = Storages::new(&parser);
@@ -593,6 +599,18 @@ mod tests {
         assert!(outlook.client_submit_time.is_empty());
         assert!(outlook.message_delivery_time.is_empty());
         assert!(outlook.creation_time.starts_with("2017-06-01T15:24:31"));
+    }
+
+    #[test]
+    fn test_from_reader() {
+        let file = std::fs::File::open("data/unicode.msg").unwrap();
+        let reader_outlook = Outlook::from_reader(file).unwrap();
+        let path_outlook = Outlook::from_path("data/unicode.msg").unwrap();
+
+        assert_eq!(reader_outlook.subject, path_outlook.subject);
+        assert_eq!(reader_outlook.sender, path_outlook.sender);
+        assert_eq!(reader_outlook.to, path_outlook.to);
+        assert_eq!(reader_outlook.cc, path_outlook.cc);
     }
 
     #[test]
