@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use hex::decode;
-
 use crate::ole::{Entry, EntryType, Reader};
 
 use super::{constants::PropIdNameMap, decode::DataType, stream::Stream};
@@ -23,30 +21,19 @@ impl StorageType {
         if id.len() != 8 {
             return None;
         }
-        // [0, 0, 0, 0] where each item is of base 256 (16x16).
-        let decoded = decode(id).ok()?;
-        let mut base = 1u32;
-        let mut sum = 0u32;
-        for &num in decoded.iter().rev() {
-            sum += num as u32 * base;
-            if base >= u32::MAX / 256 {
-                break;
-            }
-            base *= 256;
-        }
-        Some(sum)
+        u32::from_str_radix(id, 16).ok()
     }
 
     pub fn create(name: &str) -> Option<Self> {
         if name.starts_with("__recip_version1.0_") {
             // Extract the digits after '#' in __recip_version1.0_#00000000
             // Remaining digits is the index of Recipient.
-            let id = name.split("#").collect::<Vec<&str>>()[1];
+            let id = name.split('#').nth(1)?;
             let id_as_num = StorageType::convert_id_to_u32(id)?;
             return Some(StorageType::Recipient(id_as_num));
         }
         if name.starts_with("__attach_version1.0_") {
-            let id = name.split("#").collect::<Vec<&str>>()[1];
+            let id = name.split('#').nth(1)?;
             let id_as_num = StorageType::convert_id_to_u32(id)?;
             return Some(StorageType::Attachment(id_as_num));
         }

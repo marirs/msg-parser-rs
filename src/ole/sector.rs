@@ -1,26 +1,19 @@
 impl<'ole> super::ole::Reader<'ole> {
     pub(crate) fn read_sector(&self, sector_index: usize) -> Result<&[u8], super::error::Error> {
-        let result: Result<&[u8], super::error::Error>;
         let sector_size = self.sec_size.unwrap();
-        let offset = sector_size * sector_index;
-        let max_size = offset + sector_size;
+        let offset = sector_size
+            .checked_mul(sector_index)
+            .ok_or(super::error::Error::BadSizeValue("Sector offset overflow"))?;
+        let max_size = offset
+            .checked_add(sector_size)
+            .ok_or(super::error::Error::BadSizeValue("Sector offset overflow"))?;
 
-        let body_size: usize = if let Some(ref body) = self.body {
-            body.len()
-        } else {
-            0
-        };
+        let body = self.body.as_ref().ok_or(super::error::Error::BadSizeValue("File is too short"))?;
 
-        // Check if the sector has already been read
-        let sector: &[u8];
-        if body_size >= max_size {
-            let body = self.body.as_ref().unwrap();
-            sector = &body[offset..offset + sector_size];
-            result = Ok(sector);
+        if body.len() >= max_size {
+            Ok(&body[offset..offset + sector_size])
         } else {
-            result = Err(super::error::Error::BadSizeValue("File is too short"));
+            Err(super::error::Error::BadSizeValue("File is too short"))
         }
-
-        result
     }
 }

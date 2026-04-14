@@ -54,10 +54,10 @@ impl<'ole> super::ole::Reader<'ole> {
                         self.short_sec_size = Some(2usize.pow(k as u32));
 
                         // Total number of sectors used for the sector allocation table
-                        let sat: std::vec::Vec<u32> = std::vec::Vec::with_capacity(
-                            (*self.sec_size.as_ref().unwrap() / 4)
-                                * usize::from_slice(&header[44..48]),
-                        );
+                        let sat_capacity = (*self.sec_size.as_ref().unwrap() / 4)
+                            .saturating_mul(usize::from_slice(&header[44..48]))
+                            .min(super::constants::MAX_OLE_FILE_SIZE / 4);
+                        let sat: std::vec::Vec<u32> = std::vec::Vec::with_capacity(sat_capacity);
 
                         // SecID of the first sector of directory stream
                         let dsat: std::vec::Vec<u32> = vec![u32::from_slice(&header[48..52])];
@@ -76,10 +76,10 @@ impl<'ole> super::ole::Reader<'ole> {
 
                             // secID of the first sector of the SSAT & Total number
                             // of sectors used for the short-sector allocation table
-                            ssat = std::vec::Vec::with_capacity(
-                                usize::from_slice(&header[64..68])
-                                    * (*self.sec_size.as_ref().unwrap() / 4),
-                            );
+                            let ssat_capacity = usize::from_slice(&header[64..68])
+                                .saturating_mul(*self.sec_size.as_ref().unwrap() / 4)
+                                .min(super::constants::MAX_OLE_FILE_SIZE / 4);
+                            ssat = std::vec::Vec::with_capacity(ssat_capacity);
                             ssat.push(u32::from_slice(&header[60..64]));
 
                             // secID of first sector of the master sector allocation table
@@ -87,12 +87,13 @@ impl<'ole> super::ole::Reader<'ole> {
                             // the master sector allocation table
                             msat = vec![super::constants::FREE_SECID_U32; 109];
                             if header[68..72] != super::constants::END_OF_CHAIN_SECID {
-                                msat.resize(
-                                    109usize
-                                        + usize::from_slice(&header[72..76])
-                                            * (*self.sec_size.as_ref().unwrap() / 4),
-                                    super::constants::FREE_SECID_U32,
-                                );
+                                let msat_size = 109usize
+                                    .saturating_add(
+                                        usize::from_slice(&header[72..76])
+                                            .saturating_mul(*self.sec_size.as_ref().unwrap() / 4),
+                                    )
+                                    .min(super::constants::MAX_OLE_FILE_SIZE / 4);
+                                msat.resize(msat_size, super::constants::FREE_SECID_U32);
                             }
                             self.sat = Some(sat);
                             self.msat = Some(msat);
@@ -160,7 +161,7 @@ impl<'ole> super::ole::Reader<'ole> {
             .unwrap()
             .resize(total_sec_id_read, super::constants::FREE_SECID_U32);
 
-        // Now, we read the all file
+        // Now, we read the rest of the file
         if self.body.is_none() {
             self.body = Some(std::vec::Vec::new());
         }
@@ -171,6 +172,12 @@ impl<'ole> super::ole::Reader<'ole> {
             .unwrap()
             .read_to_end(buf)
             .map_err(super::error::Error::IOError)?;
+
+        if buf.len() > super::constants::MAX_OLE_FILE_SIZE {
+            return Err(super::error::Error::BadSizeValue(
+                "File exceeds maximum allowed size",
+            ));
+        }
         Ok(())
     }
 

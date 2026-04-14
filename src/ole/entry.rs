@@ -160,15 +160,18 @@ impl Entry {
     }
 
     fn build_name(array: &[u8]) -> std::string::String {
-        let mut name = std::string::String::new();
-
+        // Entry names are UTF-16LE with a null terminator
+        let mut units = Vec::with_capacity(32);
         let mut i = 0usize;
-        while i < 64 && array[i] != 0 {
-            name.push(array[i] as char);
+        while i + 1 < 64 && i + 1 < array.len() {
+            let unit = u16::from_le_bytes([array[i], array[i + 1]]);
+            if unit == 0 {
+                break;
+            }
+            units.push(unit);
             i += 2;
         }
-
-        name
+        String::from_utf16_lossy(&units)
     }
 
     /// Returns the ID of the entry.
@@ -298,7 +301,7 @@ impl<'s> EntrySlice<'s> {
 impl<'s> std::io::Read for EntrySlice<'s> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let to_read = std::cmp::min(buf.len(), self.total_size - self.read);
-        if to_read == 0 {
+        if to_read == 0 || self.max_chunk_size == 0 {
             return Ok(0);
         }
         let mut offset = self.read;
@@ -424,31 +427,45 @@ impl<'ole> super::ole::Reader<'ole> {
     }
 
     fn build_entry_tree(&mut self, id: u32, parent_id: Option<u32>) {
-        if id != super::constants::FREE_SECID_U32 {
+        let n = self.entries.as_ref().unwrap().len() as u32;
+        let mut visited = std::collections::HashSet::new();
+        // Stack items: (node_id, parent_id)
+        let mut stack: Vec<(u32, Option<u32>)> = vec![(id, parent_id)];
+
+        while let Some((current_id, current_parent)) = stack.pop() {
+            if current_id == super::constants::FREE_SECID_U32 || current_id >= n {
+                continue;
+            }
+            if !visited.insert(current_id) {
+                // Already visited — skip to prevent cycles
+                continue;
+            }
+
             // Register the parent id for the current node
-            self.entries.as_mut().unwrap()[id as usize].parent_node = parent_id;
+            self.entries.as_mut().unwrap()[current_id as usize].parent_node = current_parent;
 
             // Register as child
-            if let Some(pid) = parent_id {
+            if let Some(pid) = current_parent {
                 self.entries.as_mut().unwrap()[pid as usize]
                     .children_nodes
-                    .push(id);
+                    .push(current_id);
             }
 
-            let node_type = self.entries.as_ref().unwrap()[id as usize]._type();
+            let node_type = self.entries.as_ref().unwrap()[current_id as usize]._type();
+            let left_child = self.entries.as_ref().unwrap()[current_id as usize].left_child_node();
+            let right_child = self.entries.as_ref().unwrap()[current_id as usize].right_child_node();
+
+            // Push right first so left is processed first (stack is LIFO)
+            if right_child < n {
+                stack.push((right_child, current_parent));
+            }
+            if left_child < n {
+                stack.push((left_child, current_parent));
+            }
 
             if node_type == EntryType::RootStorage || node_type == EntryType::UserStorage {
-                let child = self.entries.as_mut().unwrap()[id as usize].root_node;
-                self.build_entry_tree(child, Some(id));
-            }
-            let left_child = self.entries.as_mut().unwrap()[id as usize].left_child_node();
-            let right_child = self.entries.as_mut().unwrap()[id as usize].right_child_node();
-            let n = self.entries.as_ref().unwrap().len() as u32;
-            if left_child < n {
-                self.build_entry_tree(left_child, parent_id);
-            }
-            if right_child < n {
-                self.build_entry_tree(right_child, parent_id);
+                let child = self.entries.as_ref().unwrap()[current_id as usize].root_node;
+                stack.push((child, Some(current_id)));
             }
         }
     }

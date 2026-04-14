@@ -35,9 +35,17 @@ impl<'ole> super::ole::Reader<'ole> {
         let mut chain = std::vec::Vec::new();
         let mut sector_index = start;
         let sat = self.sat.as_mut().unwrap();
+        let sat_len = sat.len();
         while sector_index != super::constants::END_OF_CHAIN_SECID_U32 {
+            if (sector_index as usize) >= sat_len {
+                break;
+            }
             chain.push(sector_index);
             sector_index = sat[sector_index as usize];
+            // Cycle detection: chain can never be longer than the SAT itself
+            if chain.len() > sat_len {
+                break;
+            }
         }
 
         chain
@@ -47,12 +55,19 @@ impl<'ole> super::ole::Reader<'ole> {
         let mut chain = std::vec::Vec::new();
         let mut sector_index = start;
         let sat = self.ssat.as_mut().unwrap();
+        let sat_len = sat.len();
         while sector_index != super::constants::END_OF_CHAIN_SECID_U32
             && sector_index != super::constants::FREE_SECID_U32
         {
+            if (sector_index as usize) >= sat_len {
+                break;
+            }
             chain.push(sector_index);
-
             sector_index = sat[sector_index as usize];
+            // Cycle detection: chain can never be longer than the SSAT itself
+            if chain.len() > sat_len {
+                break;
+            }
         }
 
         chain

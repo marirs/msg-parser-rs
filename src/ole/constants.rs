@@ -12,3 +12,7 @@ pub(crate) const END_OF_CHAIN_SECID_U32: u32 = 0xFFFFFFFEu32;
 pub(crate) const FREE_SECID_U32: u32 = 0xFFFFFFFFu32;
 
 pub(crate) const DIRECTORY_ENTRY_SIZE: usize = 128;
+
+/// Maximum allowed file/body size (256 MB) to prevent memory exhaustion from
+/// malformed headers that claim enormous sector counts.
+pub(crate) const MAX_OLE_FILE_SIZE: usize = 256 * 1024 * 1024;

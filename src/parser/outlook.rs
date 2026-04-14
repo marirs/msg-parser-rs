@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path, sync::LazyLock};
+use std::{fs::File, io::Read, path::Path, sync::LazyLock};
 
 use regex::Regex;
 
@@ -300,9 +300,19 @@ impl Outlook {
     /// let file = std::fs::File::open("email.msg").unwrap();
     /// let outlook = Outlook::from_reader(file).unwrap();
     /// ```
-    pub fn from_reader<R: std::io::Read>(mut reader: R) -> Result<Self, Error> {
+    pub fn from_reader<R: std::io::Read>(reader: R) -> Result<Self, Error> {
+        // Cap reads at 256 MB to prevent unbounded memory allocation
+        const MAX_SIZE: u64 = 256 * 1024 * 1024;
+        let mut limited = reader.take(MAX_SIZE + 1);
         let mut buf = Vec::new();
-        reader.read_to_end(&mut buf)?;
+        limited.read_to_end(&mut buf)?;
+        if buf.len() as u64 > MAX_SIZE {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Input exceeds maximum allowed size (256 MB)",
+            )
+            .into());
+        }
         Self::from_slice(&buf)
     }
 
