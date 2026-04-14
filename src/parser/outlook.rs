@@ -83,11 +83,12 @@ impl Person {
 #[non_exhaustive]
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Attachment {
-    pub display_name: String, // "DisplayName"
-    pub payload: String,      // "AttachDataObject"
-    pub extension: String,    // "AttachExtension"
-    pub mime_tag: String,     // "AttachMimeTag"
-    pub file_name: String,    // "AttachFilename"
+    pub display_name: String,   // "DisplayName"
+    pub payload: String,        // "AttachDataObject"
+    pub extension: String,      // "AttachExtension"
+    pub mime_tag: String,       // "AttachMimeTag"
+    pub file_name: String,      // "AttachFilename" (8.3 short name)
+    pub long_file_name: String, // "AttachLongFilename" (full name)
 }
 
 impl Attachment {
@@ -98,6 +99,7 @@ impl Attachment {
             extension: storages.get_val_from_attachment_or_default(idx, "AttachExtension"),
             mime_tag: storages.get_val_from_attachment_or_default(idx, "AttachMimeTag"),
             file_name: storages.get_val_from_attachment_or_default(idx, "AttachFilename"),
+            long_file_name: storages.get_val_from_attachment_or_default(idx, "AttachLongFilename"),
         }
     }
 }
@@ -421,6 +423,20 @@ mod tests {
             filenames,
             vec![
                 "loan_p~1.doc".to_string(),
+                "image001.png".to_string(),
+                "image002.jpg".to_string()
+            ]
+        );
+        // Check long filenames
+        let long_names: Vec<String> = outlook
+            .attachments
+            .iter()
+            .map(|x| x.long_file_name.clone())
+            .collect();
+        assert_eq!(
+            long_names,
+            vec![
+                "loan_proposal.doc".to_string(),
                 "image001.png".to_string(),
                 "image002.jpg".to_string()
             ]
