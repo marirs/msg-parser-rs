@@ -261,6 +261,13 @@ impl Storages {
         })
     }
 
+    pub fn get_attachment_int_prop(&self, idx: usize, key: &str) -> Option<u32> {
+        self.attachments.get(idx).and_then(|a| match a.get(key) {
+            Some(DataType::PtypInteger32(v)) => Some(*v),
+            _ => None,
+        })
+    }
+
     pub fn get_bytes_from_attachment(&self, idx: usize, key: &str) -> Vec<u8> {
         self.attachments
             .get(idx)

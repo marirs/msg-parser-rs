@@ -93,6 +93,7 @@ pub struct Attachment {
     pub mime_tag: String,     // "AttachMimeTag"
     pub file_name: String,    // "AttachFilename" (8.3 short name)
     pub long_file_name: String, // "AttachLongFilename" (full name)
+    pub attach_method: u32,   // "AttachMethod" (0x3705) 1=by_value, 5=embedded_msg, 6=ole
 }
 
 impl Attachment {
@@ -107,6 +108,9 @@ impl Attachment {
             mime_tag: storages.get_val_from_attachment_or_default(idx, "AttachMimeTag"),
             file_name: storages.get_val_from_attachment_or_default(idx, "AttachFilename"),
             long_file_name: storages.get_val_from_attachment_or_default(idx, "AttachLongFilename"),
+            attach_method: storages
+                .get_attachment_int_prop(idx, "AttachMethod")
+                .unwrap_or(0),
         }
     }
 }
@@ -480,6 +484,21 @@ mod tests {
         assert!(!outlook.attachments[0].payload_bytes.is_empty());
         assert!(!outlook.attachments[1].payload_bytes.is_empty());
         assert!(!outlook.attachments[2].payload_bytes.is_empty());
+    }
+
+    #[test]
+    fn test_attach_method() {
+        // test_email.msg: attachment #0 is embedded msg (method=5), #1 and #2 are by_value (method=1)
+        let outlook = Outlook::from_path("data/test_email.msg").unwrap();
+        assert_eq!(outlook.attachments[0].attach_method, 5); // embedded_msg
+        assert_eq!(outlook.attachments[1].attach_method, 1); // by_value
+        assert_eq!(outlook.attachments[2].attach_method, 1); // by_value
+
+        // attachment.msg: all by_value
+        let outlook = Outlook::from_path("data/attachment.msg").unwrap();
+        for attach in &outlook.attachments {
+            assert_eq!(attach.attach_method, 1);
+        }
     }
 
     #[test]
