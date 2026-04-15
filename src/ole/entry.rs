@@ -393,15 +393,38 @@ impl<'ole> super::ole::Reader<'ole> {
     ) -> Result<EntrySlice<'_>, super::error::Error> {
         let ssector_size = *self.short_sec_size.as_ref().unwrap();
         let mut entry_slice = EntrySlice::new(ssector_size, size);
-        let short_stream_chain = &self.entries.as_ref().unwrap()[0].sec_id_chain;
+        let entries = self
+            .entries
+            .as_ref()
+            .ok_or(super::error::Error::BadSizeValue("No directory entries"))?;
+        if entries.is_empty() {
+            return Err(super::error::Error::BadSizeValue("No root entry"));
+        }
+        let short_stream_chain = &entries[0].sec_id_chain;
         let n_per_sector = *self.sec_size.as_ref().unwrap() / ssector_size;
+        if n_per_sector == 0 {
+            return Err(super::error::Error::BadSizeValue(
+                "Invalid sector/short-sector size ratio",
+            ));
+        }
         let mut total_read = 0;
         for ssector_id in chain {
-            let sector_index = short_stream_chain[*ssector_id as usize / n_per_sector];
+            let chain_idx = *ssector_id as usize / n_per_sector;
+            if chain_idx >= short_stream_chain.len() {
+                return Err(super::error::Error::BadSizeValue(
+                    "Short sector ID out of range",
+                ));
+            }
+            let sector_index = short_stream_chain[chain_idx];
             let sector = self.read_sector(sector_index as usize)?;
             let ssector_index = *ssector_id as usize % n_per_sector;
             let start = ssector_index * ssector_size;
             let end = start + std::cmp::min(ssector_size, size - total_read);
+            if end > sector.len() {
+                return Err(super::error::Error::BadSizeValue(
+                    "Short sector slice out of range",
+                ));
+            }
             entry_slice.add_chunk(&sector[start..end]);
             total_read += end - start;
         }

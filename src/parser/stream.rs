@@ -18,14 +18,14 @@ pub struct Stream {
 
 impl Stream {
     // __substg1.0__AAAABBBB where AAAA is property id and BBBB is property datatype
-    fn extract_id_and_datatype(name: &str) -> (String, String) {
-        let tag = name
-            .split("_")
-            .filter(|&x| !x.is_empty())
-            .collect::<Vec<&str>>()[1];
+    fn extract_id_and_datatype(name: &str) -> Option<(String, String)> {
+        let tag = name.split("_").filter(|&x| !x.is_empty()).nth(1)?;
+        if tag.len() < 8 {
+            return None;
+        }
         let prop_id = String::from("0x") + &tag[..4];
         let prop_datatype = String::from("0x") + &tag[tag.len() - 4..];
-        (prop_id, prop_datatype)
+        Some((prop_id, prop_datatype))
     }
 
     fn is_stream(name: &str) -> bool {
@@ -43,7 +43,7 @@ impl Stream {
             return None;
         }
         // Split name up into property id and datatype
-        let (prop_id, prop_datatype) = Self::extract_id_and_datatype(name);
+        let (prop_id, prop_datatype) = Self::extract_id_and_datatype(name)?;
         // Try standard prop map first, then named props for 0x8000+ range
         let key = prop_map
             .get_canonical_name(&prop_id)
@@ -71,13 +71,20 @@ mod tests {
 
     #[test]
     fn test_extract_id_and_datatype() {
-        let (prop_id, prop_datatype) = Stream::extract_id_and_datatype("__substg1.0_3701000D");
+        let (prop_id, prop_datatype) =
+            Stream::extract_id_and_datatype("__substg1.0_3701000D").unwrap();
         assert_eq!(prop_id, "0x3701");
         assert_eq!(prop_datatype, "0x000D");
 
-        let (prop_id, prop_datatype) = Stream::extract_id_and_datatype("__substg1.0_1016102F");
+        let (prop_id, prop_datatype) =
+            Stream::extract_id_and_datatype("__substg1.0_1016102F").unwrap();
         assert_eq!(prop_id, "0x1016");
         assert_eq!(prop_datatype, "0x102F");
+
+        // Malformed names should return None, not panic
+        assert!(Stream::extract_id_and_datatype("__substg1.0_").is_none());
+        assert!(Stream::extract_id_and_datatype("__substg1.0_ABC").is_none());
+        assert!(Stream::extract_id_and_datatype("").is_none());
     }
 
     #[test]
