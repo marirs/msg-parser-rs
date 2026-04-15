@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, path::Path, sync::LazyLock};
+use std::{io::Read, path::Path, sync::LazyLock};
 
 use regex::Regex;
 
@@ -365,8 +365,8 @@ impl Outlook {
     /// println!("{}", outlook.subject);
     /// ```
     pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        let file = File::open(path)?;
-        let parser = ole::Reader::new(file)?;
+        let data = std::fs::read(path)?;
+        let parser = ole::Reader::from_bytes(data)?;
         let mut storages = Storages::new(&parser);
         storages.process_streams(&parser);
 
@@ -400,7 +400,11 @@ impl Outlook {
             )
             .into());
         }
-        Self::from_slice(&buf)
+        // Use from_bytes directly to avoid an extra copy through from_slice
+        let parser = ole::Reader::from_bytes(buf)?;
+        let mut storages = Storages::new(&parser);
+        storages.process_streams(&parser);
+        Ok(Self::populate(&storages))
     }
 
     /// Parse a `.msg` file from a byte slice already in memory.
@@ -417,7 +421,7 @@ impl Outlook {
     /// let outlook = Outlook::from_slice(&bytes).unwrap();
     /// ```
     pub fn from_slice(slice: impl AsRef<[u8]>) -> Result<Self, Error> {
-        let parser = ole::Reader::new(slice.as_ref())?;
+        let parser = ole::Reader::from_bytes(slice.as_ref())?;
         let mut storages = Storages::new(&parser);
         storages.process_streams(&parser);
 
@@ -571,7 +575,7 @@ mod tests {
         let err = Outlook::from_path(path).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "Error parsing file with ole: failed to fill whole buffer".to_string()
+            "Error parsing file with ole: Invalid OLE File".to_string()
         );
     }
 

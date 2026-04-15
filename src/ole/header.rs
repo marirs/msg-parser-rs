@@ -2,6 +2,136 @@ use crate::ole::util::FromSlice;
 use std::io::Read;
 
 impl<'ole> super::ole::Reader<'ole> {
+    /// Parse the header and MSAT directly from a complete byte buffer.
+    ///
+    /// This avoids the `BufReader` and streaming reads used by `parse_header`,
+    /// making it suitable for data that is already fully in memory (e.g. from
+    /// `std::fs::read` or mmap).
+    pub(crate) fn parse_header_from_bytes(
+        &mut self,
+        data: &[u8],
+    ) -> Result<(), super::error::Error> {
+        if data.len() < super::constants::HEADER_SIZE {
+            return Err(super::error::Error::InvalidOLEFile);
+        }
+
+        let header = &data[..super::constants::HEADER_SIZE];
+
+        // Check file identifier
+        if super::constants::IDENTIFIER != header[0..8] {
+            return Err(super::error::Error::InvalidOLEFile);
+        }
+
+        // UID
+        self.uid = header[8..24].to_vec();
+
+        // Revision number & version number
+        self.revision_number = Some(usize::from_slice(&header[24..26]) as u16);
+        self.version_number = Some(usize::from_slice(&header[26..28]) as u16);
+
+        // Check little-endianness
+        if header[28..30] == super::constants::BIG_ENDIAN_IDENTIFIER {
+            return Err(super::error::Error::NotImplementedYet);
+        } else if header[28..30] != super::constants::LITTLE_ENDIAN_IDENTIFIER {
+            return Err(super::error::Error::InvalidOLEFile);
+        }
+
+        // Sector size
+        let k = usize::from_slice(&header[30..32]);
+        if k >= 16 {
+            return Err(super::error::Error::BadSizeValue("Overflow on sector size"));
+        }
+        self.sec_size = Some(2usize.pow(k as u32));
+
+        // Short sector size
+        let k = usize::from_slice(&header[32..34]);
+        if k >= 16 {
+            return Err(super::error::Error::BadSizeValue(
+                "Overflow on short sector size",
+            ));
+        }
+        self.short_sec_size = Some(2usize.pow(k as u32));
+
+        // SAT capacity
+        let sat_capacity = (*self.sec_size.as_ref().unwrap() / 4)
+            .saturating_mul(usize::from_slice(&header[44..48]))
+            .min(super::constants::MAX_OLE_FILE_SIZE / 4);
+        let sat: std::vec::Vec<u32> = std::vec::Vec::with_capacity(sat_capacity);
+
+        // DSAT
+        let dsat: std::vec::Vec<u32> = vec![u32::from_slice(&header[48..52])];
+
+        // Minimum standard stream size
+        self.minimum_standard_stream_size = Some(usize::from_slice(&header[56..60]));
+        if *self.minimum_standard_stream_size.as_ref().unwrap() < 4096usize {
+            return Err(super::error::Error::InvalidOLEFile);
+        }
+
+        // SSAT
+        let ssat_capacity = usize::from_slice(&header[64..68])
+            .saturating_mul(*self.sec_size.as_ref().unwrap() / 4)
+            .min(super::constants::MAX_OLE_FILE_SIZE / 4);
+        let mut ssat = std::vec::Vec::with_capacity(ssat_capacity);
+        ssat.push(u32::from_slice(&header[60..64]));
+
+        // MSAT
+        let mut msat = vec![super::constants::FREE_SECID_U32; 109];
+        if header[68..72] != super::constants::END_OF_CHAIN_SECID {
+            let msat_size = 109usize
+                .saturating_add(
+                    usize::from_slice(&header[72..76])
+                        .saturating_mul(*self.sec_size.as_ref().unwrap() / 4),
+                )
+                .min(super::constants::MAX_OLE_FILE_SIZE / 4);
+            msat.resize(msat_size, super::constants::FREE_SECID_U32);
+        }
+
+        self.sat = Some(sat);
+        self.msat = Some(msat);
+        self.dsat = Some(dsat);
+        self.ssat = Some(ssat);
+
+        // Build MSAT from header
+        let mut total_sec_id_read = self.read_sec_ids(&header[76..], 0);
+
+        // Process additional MSAT sectors from the body (data after header)
+        let body_data = &data[super::constants::HEADER_SIZE..];
+        if total_sec_id_read == 109 {
+            let sec_size = *self.sec_size.as_ref().unwrap();
+            let mut sec_id = usize::from_slice(&header[68..72]);
+            let mut steps = 0usize;
+
+            while sec_id != super::constants::END_OF_CHAIN_SECID_U32 as usize {
+                let offset = sec_id * sec_size;
+                if offset + sec_size > body_data.len() {
+                    break;
+                }
+                total_sec_id_read +=
+                    self.read_sec_ids(&body_data[offset..offset + sec_size - 4], total_sec_id_read);
+                sec_id = usize::from_slice(&body_data[offset + sec_size - 4..offset + sec_size]);
+                steps += 1;
+                if steps * sec_size > body_data.len() {
+                    return Err(super::error::Error::InvalidOLEFile);
+                }
+            }
+        }
+
+        self.msat
+            .as_mut()
+            .unwrap()
+            .resize(total_sec_id_read, super::constants::FREE_SECID_U32);
+
+        // Store the body — single allocation, no double-copy
+        if body_data.len() > super::constants::MAX_OLE_FILE_SIZE {
+            return Err(super::error::Error::BadSizeValue(
+                "File exceeds maximum allowed size",
+            ));
+        }
+        self.body = Some(body_data.to_vec());
+
+        Ok(())
+    }
+
     pub(crate) fn parse_header(&mut self) -> Result<(), super::error::Error> {
         // read the header
         let mut header: std::vec::Vec<u8> = vec![0u8; super::constants::HEADER_SIZE];

@@ -102,8 +102,45 @@ impl<'ole> Reader<'ole> {
     /// let reader = Reader::from_path("data/test_email.msg").unwrap();
     /// ```
     pub fn from_path(path: &str) -> Result<Reader<'_>, super::error::Error> {
-        let f = std::fs::File::open(path).map_err(super::error::Error::IOError)?;
-        Reader::new(f)
+        let data = std::fs::read(path).map_err(super::error::Error::IOError)?;
+        Reader::from_bytes(data)
+    }
+
+    /// Constructs a new `Reader` from a byte vector or slice already in memory.
+    ///
+    /// This avoids the double-copy that occurs when passing a `&[u8]` to
+    /// [`new()`](Reader::new), since `new()` wraps the source in a `BufReader`
+    /// and then copies everything into an internal buffer via `read_to_end`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use crate::ole::Reader;
+    /// let data = std::fs::read("data/test_email.msg").unwrap();
+    /// let reader = Reader::from_bytes(data).unwrap();
+    /// ```
+    pub fn from_bytes(data: impl Into<Vec<u8>>) -> Result<Reader<'ole>, super::error::Error> {
+        let data = data.into();
+        let mut t = Reader {
+            buf_reader: None,
+            uid: vec![0u8; super::constants::UID_SIZE],
+            revision_number: None,
+            version_number: None,
+            sec_size: None,
+            short_sec_size: None,
+            sat: None,
+            dsat: None,
+            minimum_standard_stream_size: None,
+            ssat: None,
+            msat: None,
+            body: None,
+            entries: None,
+            root_entry: None,
+        };
+        t.parse_header_from_bytes(&data)?;
+        t.build_sat()?;
+        t.build_directory_entries()?;
+        Ok(t)
     }
 
     /// Returns an iterator over the directory entries of the OLE file.
