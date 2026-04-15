@@ -11,6 +11,31 @@ use super::{
     storage::{Properties, Storages},
 };
 
+const B64_CHARS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn base64_encode(data: &[u8]) -> String {
+    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        out.push(B64_CHARS[((triple >> 18) & 0x3F) as usize] as char);
+        out.push(B64_CHARS[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(B64_CHARS[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(B64_CHARS[(triple & 0x3F) as usize] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
+}
+
 type Name = String;
 type Email = String;
 
@@ -508,6 +533,71 @@ impl Outlook {
     pub fn html_from_rtf(&self) -> Option<String> {
         let rtf = self.rtf_decompressed()?;
         super::rtf::extract_html_from_rtf(&rtf)
+    }
+
+    /// Find an attachment by its Content-ID.
+    ///
+    /// HTML bodies reference inline images via `cid:` URIs. This method
+    /// resolves a Content-ID string to the matching attachment.
+    ///
+    /// The `cid` parameter should be the bare identifier (without the `cid:`
+    /// scheme prefix).
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use msg_parser::Outlook;
+    ///
+    /// let outlook = Outlook::from_path("email.msg").unwrap();
+    /// if let Some(img) = outlook.attachment_by_content_id("image001@01D00000.00000000") {
+    ///     println!("Found inline image: {} ({} bytes)", img.long_file_name, img.payload_bytes.len());
+    /// }
+    /// ```
+    pub fn attachment_by_content_id(&self, cid: &str) -> Option<&Attachment> {
+        if cid.is_empty() {
+            return None;
+        }
+        self.attachments
+            .iter()
+            .find(|a| !a.content_id.is_empty() && a.content_id == cid)
+    }
+
+    /// Resolve all `cid:` references in an HTML string, replacing them with
+    /// inline `data:` URIs using base64-encoded attachment content.
+    ///
+    /// Returns the HTML with all resolvable `cid:` references replaced.
+    /// Unresolvable references are left as-is.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use msg_parser::Outlook;
+    ///
+    /// let outlook = Outlook::from_path("email.msg").unwrap();
+    /// let html = outlook.resolve_cid_references(&outlook.html);
+    /// // All cid:image001@... references are now data: URIs
+    /// std::fs::write("email.html", html).unwrap();
+    /// ```
+    pub fn resolve_cid_references(&self, html: &str) -> String {
+        let mut result = html.to_string();
+        for attach in &self.attachments {
+            if attach.content_id.is_empty() {
+                continue;
+            }
+            let cid_ref = format!("cid:{}", attach.content_id);
+            if !result.contains(&cid_ref) {
+                continue;
+            }
+            let mime = if attach.mime_tag.is_empty() {
+                "application/octet-stream"
+            } else {
+                &attach.mime_tag
+            };
+            let b64 = base64_encode(&attach.payload_bytes);
+            let data_uri = format!("data:{};base64,{}", mime, b64);
+            result = result.replace(&cid_ref, &data_uri);
+        }
+        result
     }
 }
 
