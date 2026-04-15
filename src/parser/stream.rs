@@ -3,6 +3,7 @@ use crate::ole::EntrySlice;
 use super::{
     constants::PropIdNameMap,
     decode::{DataType, PtypDecoder},
+    named_prop::NamedPropertyMap,
     storage::StorageType,
 };
 
@@ -35,6 +36,7 @@ impl Stream {
         name: &str,
         entry_slice: &mut EntrySlice,
         prop_map: &PropIdNameMap,
+        named_props: &NamedPropertyMap,
         parent: &StorageType,
     ) -> Option<Self> {
         if !Self::is_stream(name) {
@@ -42,7 +44,14 @@ impl Stream {
         }
         // Split name up into property id and datatype
         let (prop_id, prop_datatype) = Self::extract_id_and_datatype(name);
-        let key = prop_map.get_canonical_name(&prop_id)?.to_string();
+        // Try standard prop map first, then named props for 0x8000+ range
+        let key = prop_map
+            .get_canonical_name(&prop_id)
+            .or_else(|| {
+                let id = u16::from_str_radix(prop_id.trim_start_matches("0x"), 16).ok()?;
+                named_props.get(id)
+            })?
+            .to_string();
         let value = PtypDecoder::decode(entry_slice, &prop_datatype).ok()?;
         Some(Self {
             parent: parent.clone(),
@@ -55,8 +64,8 @@ impl Stream {
 #[cfg(test)]
 mod tests {
     use super::{
-        super::constants::PropIdNameMap, super::decode::DataType, super::storage::StorageType,
-        Stream,
+        super::constants::PropIdNameMap, super::decode::DataType,
+        super::named_prop::NamedPropertyMap, super::storage::StorageType, Stream,
     };
     use crate::ole::Reader;
 
@@ -81,6 +90,7 @@ mod tests {
     fn test_create_stream() {
         let parser = Reader::from_path("data/test_email.msg").unwrap();
         let prop_map = PropIdNameMap::init();
+        let named_props = NamedPropertyMap::default();
 
         // Root entry is ok.
         let mut slice = parser
@@ -94,6 +104,7 @@ mod tests {
             "__substg1.0_0C1F001F",
             &mut slice,
             &prop_map,
+            &named_props,
             &StorageType::RootEntry,
         );
         assert_eq!(
@@ -116,6 +127,7 @@ mod tests {
             "__substg1.0_3001001F",
             &mut slice,
             &prop_map,
+            &named_props,
             &StorageType::Recipient(1),
         );
         assert_eq!(
@@ -143,6 +155,7 @@ mod tests {
             "__substg1.0_3703001F",
             &mut attachment,
             &prop_map,
+            &NamedPropertyMap::default(),
             &StorageType::Attachment(0),
         );
         assert_eq!(

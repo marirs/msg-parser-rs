@@ -1,5 +1,6 @@
 mod constants;
 mod decode;
+mod named_prop;
 mod rtf;
 mod storage;
 mod stream;

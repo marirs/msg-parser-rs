@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::ole::{Entry, EntryType, Reader};
 
-use super::{constants::PropIdNameMap, decode::DataType, stream::Stream};
+use super::{constants::PropIdNameMap, decode::DataType, named_prop::NamedPropertyMap, stream::Stream};
 
 // StorageType refers to major components in Message object.
 // Refer to MS-OXPROPS 1.3.3
@@ -88,6 +88,7 @@ pub type Attachments = Vec<Properties>;
 pub struct Storages {
     storage_map: EntryStorageMap,
     prop_map: &'static PropIdNameMap,
+    named_props: NamedPropertyMap,
     pub attachments: Attachments,
     pub recipients: Recipients,
     // Mail properties
@@ -105,13 +106,18 @@ impl Storages {
     fn create_stream(&self, parser: &Reader, entry: &Entry) -> Option<Stream> {
         let parent = self.storage_map.get_storage_type(entry.parent_node())?;
         let mut slice = parser.get_entry_slice(entry).ok()?;
-        Stream::create(entry.name(), &mut slice, self.prop_map, parent)
+        Stream::create(entry.name(), &mut slice, self.prop_map, &self.named_props, parent)
     }
 
     /// Parse fixed-size properties from a __properties_version1.0 stream.
     /// Non-root storages have an 8-byte header, then 16-byte entries.
     /// Each entry: 4 bytes prop_tag (type u16 + id u16), 4 bytes flags, 8 bytes value.
-    fn parse_fixed_props(data: &[u8], prop_map: &PropIdNameMap, is_root: bool) -> Properties {
+    fn parse_fixed_props(
+        data: &[u8],
+        prop_map: &PropIdNameMap,
+        named_props: &NamedPropertyMap,
+        is_root: bool,
+    ) -> Properties {
         let header_size = if is_root { 32 } else { 8 };
         let mut props = Properties::new();
         if data.len() < header_size {
@@ -123,8 +129,11 @@ impl Storages {
             let prop_id = u16::from_le_bytes([data[offset + 2], data[offset + 3]]);
             let value_bytes = &data[offset + 8..offset + 16];
 
+            // Try standard prop map first, then named props for 0x8000+ range
             let id_str = format!("0x{:04X}", prop_id);
-            let name = prop_map.get_canonical_name(&id_str);
+            let name: Option<&str> = prop_map
+                .get_canonical_name(&id_str)
+                .or_else(|| named_props.get(prop_id));
             if let Some(name) = name {
                 match prop_type {
                     // PtypInteger32
@@ -172,7 +181,7 @@ impl Storages {
                     let mut data = vec![0u8; slice.len()];
                     if std::io::Read::read_exact(&mut slice, &mut data).is_ok() {
                         let is_root = matches!(parent, StorageType::RootEntry);
-                        let fixed = Self::parse_fixed_props(&data, self.prop_map, is_root);
+                        let fixed = Self::parse_fixed_props(&data, self.prop_map, &self.named_props, is_root);
                         match parent {
                             StorageType::Recipient(id) => {
                                 recipients_map.entry(*id).or_default().extend(fixed);
@@ -221,13 +230,54 @@ impl Storages {
         let attachments: Attachments = vec![];
         let storage_map = EntryStorageMap::new(parser);
         let prop_map = PropIdNameMap::init();
+        let named_props = Self::build_named_props(parser);
         Self {
             storage_map,
             prop_map,
+            named_props,
             root,
             recipients,
             attachments,
         }
+    }
+
+    /// Read the __nameid_version1.0 streams and build the named property map.
+    fn build_named_props(parser: &Reader) -> NamedPropertyMap {
+        use std::io::Read;
+
+        let mut nameid_id = None;
+        for entry in parser.iterate() {
+            if entry.name() == "__nameid_version1.0" {
+                nameid_id = Some(entry.id());
+                break;
+            }
+        }
+
+        let Some(nid) = nameid_id else {
+            return NamedPropertyMap::default();
+        };
+
+        let mut guid_stream = Vec::new();
+        let mut entry_stream = Vec::new();
+        let mut string_stream = Vec::new();
+
+        for entry in parser.iterate() {
+            if entry.parent_node() != Some(nid) {
+                continue;
+            }
+            if let Ok(mut slice) = parser.get_entry_slice(entry) {
+                let mut buf = vec![0u8; slice.len()];
+                let _ = slice.read(&mut buf);
+                match entry.name() {
+                    "__substg1.0_00020102" => guid_stream = buf,
+                    "__substg1.0_00030102" => entry_stream = buf,
+                    "__substg1.0_00040102" => string_stream = buf,
+                    _ => {}
+                }
+            }
+        }
+
+        NamedPropertyMap::parse(&guid_stream, &entry_stream, &string_stream)
     }
 
     pub fn get_val_from_root_or_default(&self, key: &str) -> String {
@@ -414,6 +464,32 @@ mod tests {
         assert_eq!(
             display_name,
             &DataType::PtypString("Sriram Govindan".to_string())
+        );
+    }
+
+    #[test]
+    fn test_named_properties_resolved() {
+        let parser = Reader::from_path("data/test_email.msg").unwrap();
+        let mut storages = Storages::new(&parser);
+        storages.process_streams(&parser);
+
+        // Named properties (0x8000+ range) should be resolved and present in root
+        // test_email.msg has well-known named props like InternetAccountName, ReminderSet, etc.
+        let has_named = storages.root.keys().any(|k| {
+            matches!(
+                k.as_str(),
+                "InternetAccountName"
+                    | "InternetAccountStamp"
+                    | "ReminderSet"
+                    | "SmartNoAttach"
+                    | "SideEffects"
+                    | "Private"
+            )
+        });
+        assert!(
+            has_named,
+            "Expected at least one well-known named property in root. Keys: {:?}",
+            storages.root.keys().collect::<Vec<_>>()
         );
     }
 }
