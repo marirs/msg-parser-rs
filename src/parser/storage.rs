@@ -293,6 +293,11 @@ impl Storages {
         NamedPropertyMap::parse(&guid_stream, &entry_stream, &string_stream)
     }
 
+    /// Returns the set of all resolved named property names (0x8000+ range).
+    pub fn named_property_names(&self) -> std::collections::HashSet<&str> {
+        self.named_props.all_names()
+    }
+
     pub fn get_val_from_root_or_default(&self, key: &str) -> String {
         self.root.get(key).map_or(String::new(), |x| x.into())
     }

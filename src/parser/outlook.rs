@@ -294,6 +294,11 @@ pub struct Outlook {
     pub last_modification_time: String,
     /// File attachments. See [`Attachment`] for details.
     pub attachments: Vec<Attachment>,
+    /// Named properties from the MAPI 0x8000+ range (e.g. `ReminderSet`,
+    /// `InternetAccountName`, or custom string-named properties).
+    /// Keys are the resolved property names, values are the string
+    /// representation of the property value.
+    pub named_properties: std::collections::HashMap<String, String>,
 }
 
 impl Outlook {
@@ -351,6 +356,15 @@ impl Outlook {
                 .enumerate()
                 .map(|(i, _)| Attachment::create(storages, i))
                 .collect(),
+            named_properties: {
+                let named_names = storages.named_property_names();
+                storages
+                    .root
+                    .iter()
+                    .filter(|(k, _)| named_names.contains(k.as_str()))
+                    .map(|(k, v)| (k.clone(), String::from(v)))
+                    .collect()
+            },
         }
     }
 

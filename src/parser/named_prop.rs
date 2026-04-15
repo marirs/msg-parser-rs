@@ -237,6 +237,11 @@ impl NamedPropertyMap {
         self.map.get(&prop_id).map(|n| n.as_str())
     }
 
+    /// Returns all resolved property names in the named property map.
+    pub(crate) fn all_names(&self) -> std::collections::HashSet<&str> {
+        self.map.values().map(|n| n.as_str()).collect()
+    }
+
     #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.map.is_empty()
