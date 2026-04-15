@@ -277,7 +277,13 @@ mod tests {
                 let safe_name: String = entry
                     .name()
                     .chars()
-                    .map(|c| if c.is_alphanumeric() || c == '.' || c == '_' || c == '-' { c } else { '_' })
+                    .map(|c| {
+                        if c.is_alphanumeric() || c == '.' || c == '_' || c == '-' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
                     .collect();
                 let mut file =
                     std::fs::File::create(format!("data/streams/{}.bin", safe_name)).unwrap();
