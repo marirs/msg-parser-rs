@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use crate::ole::{Entry, EntryType, Reader};
 
-use super::{constants::PropIdNameMap, decode::DataType, named_prop::NamedPropertyMap, stream::Stream};
+use super::{
+    constants::PropIdNameMap, decode::DataType, named_prop::NamedPropertyMap, stream::Stream,
+};
 
 // StorageType refers to major components in Message object.
 // Refer to MS-OXPROPS 1.3.3
@@ -106,7 +108,13 @@ impl Storages {
     fn create_stream(&self, parser: &Reader, entry: &Entry) -> Option<Stream> {
         let parent = self.storage_map.get_storage_type(entry.parent_node())?;
         let mut slice = parser.get_entry_slice(entry).ok()?;
-        Stream::create(entry.name(), &mut slice, self.prop_map, &self.named_props, parent)
+        Stream::create(
+            entry.name(),
+            &mut slice,
+            self.prop_map,
+            &self.named_props,
+            parent,
+        )
     }
 
     /// Parse fixed-size properties from a __properties_version1.0 stream.
@@ -181,7 +189,12 @@ impl Storages {
                     let mut data = vec![0u8; slice.len()];
                     if std::io::Read::read_exact(&mut slice, &mut data).is_ok() {
                         let is_root = matches!(parent, StorageType::RootEntry);
-                        let fixed = Self::parse_fixed_props(&data, self.prop_map, &self.named_props, is_root);
+                        let fixed = Self::parse_fixed_props(
+                            &data,
+                            self.prop_map,
+                            &self.named_props,
+                            is_root,
+                        );
                         match parent {
                             StorageType::Recipient(id) => {
                                 recipients_map.entry(*id).or_default().extend(fixed);
