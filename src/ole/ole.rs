@@ -266,13 +266,21 @@ mod tests {
         println!("SAT: {:?}", ole.sat.as_ref().unwrap());
         println!("SSAT: {:?}", ole.ssat.as_ref().unwrap());
         println!("DSAT: {:?}", ole.dsat.as_ref().unwrap());
+        let _ = std::fs::create_dir_all("data/streams");
         for entry in ole.iterate() {
             println!("{}", entry);
             if let Ok(mut slice) = ole.get_entry_slice(entry) {
                 let mut buf = vec![0u8; slice.len()];
                 let read_size = slice.read(&mut buf).unwrap();
+                // Sanitize entry name for use as a filename (OLE names can
+                // contain control characters like \x05 which are invalid on Windows)
+                let safe_name: String = entry
+                    .name()
+                    .chars()
+                    .map(|c| if c.is_alphanumeric() || c == '.' || c == '_' || c == '-' { c } else { '_' })
+                    .collect();
                 let mut file =
-                    std::fs::File::create(format!("data/streams/{}.bin", entry.name())).unwrap();
+                    std::fs::File::create(format!("data/streams/{}.bin", safe_name)).unwrap();
                 println!("Real len: {}", slice.real_len());
                 file.write_all(&buf).unwrap();
                 assert_eq!(read_size, slice.real_len());
