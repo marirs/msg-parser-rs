@@ -22,9 +22,6 @@ thiserror = "2"
 name = "msg_parser"
 path = "src/lib.rs"
 
-[badges]
-travis-ci = { repository = "marirs/msg-parser-rs" }
-
 [profile.dev]
 opt-level = 3
 

@@ -1,5 +1,6 @@
 Outlook Email Message (.msg) parser
 ====================================
+![CI](https://github.com/marirs/msg-parser-rs/actions/workflows/ci.yml/badge.svg)
 ![Crates.io](https://img.shields.io/crates/v/msg_parser)
 ![docs.rs](https://img.shields.io/docsrs/msg_parser)
 
