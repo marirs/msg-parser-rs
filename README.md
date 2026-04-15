@@ -152,6 +152,15 @@ if let Some(rtf_bytes) = outlook.rtf_decompressed() {
 }
 ```
 
+### Named properties (MAPI 0x8000+ range)
+
+The parser automatically resolves MAPI named properties — both well-known
+`dispID`-based properties (e.g. `ReminderSet`, `InternetAccountName`,
+`AppointmentStartWhole`) and custom string-named properties stored in the
+`__nameid_version1.0` streams. These are merged into the same property maps
+used for standard MAPI properties, so they appear transparently in the parsed
+output and JSON serialization.
+
 ### Message metadata
 
 ```rust
@@ -225,6 +234,13 @@ println!("{}", json);
 | `Outlook::html_from_rtf()` | `Option<String>` | Extract HTML from compressed RTF |
 | `Attachment::as_message()` | `Option<Result<Outlook, Error>>` | Parse embedded `.msg` attachment |
 | `Attachment::is_embedded_message()` | `bool` | Check if attachment is embedded `.msg` |
+
+### Performance
+
+`from_path` and `from_slice` use an optimized zero-copy header parsing path
+(`Reader::from_bytes`) that avoids the double-allocation overhead of streaming
+through `BufReader`. For large `.msg` files this reduces peak memory usage and
+parse time compared to the generic `from_reader` path.
 
 ### Requirements
 
