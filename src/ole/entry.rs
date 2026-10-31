@@ -231,7 +231,7 @@ impl std::fmt::Display for Entry {
             f,
             "Entry #{}. Type: {}, Color: {}, Name: {},
       Size: {}. SecID chain: {:?}",
-            self.id, self.entry_type, self.color, &self.name, self.size, self.sec_id_chain
+            self.id, self.entry_type, self.color, self.name, self.size, self.sec_id_chain
         )
     }
 }
