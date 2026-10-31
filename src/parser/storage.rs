@@ -101,7 +101,7 @@ impl Storages {
     fn to_arr(map: HashMap<u32, Properties>) -> Vec<Properties> {
         let mut tuples: Vec<(u32, Properties)> =
             map.into_iter().collect::<Vec<(u32, Properties)>>();
-        tuples.sort_by(|a, b| a.0.cmp(&b.0));
+        tuples.sort_by_key(|entry| entry.0);
         tuples.into_iter().map(|x| x.1).collect::<Vec<Properties>>()
     }
 

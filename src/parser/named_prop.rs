@@ -215,7 +215,7 @@ impl NamedPropertyMap {
                         // UTF-16LE decode
                         let utf16_data = &string_stream[str_start..str_start + str_len];
                         let mut units = Vec::with_capacity(str_len / 2);
-                        for chunk in utf16_data.chunks_exact(2) {
+                        for chunk in utf16_data.as_chunks::<2>().0 {
                             units.push(u16::from_le_bytes([chunk[0], chunk[1]]));
                         }
                         let name = String::from_utf16_lossy(&units);
